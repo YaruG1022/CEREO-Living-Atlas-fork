@@ -165,8 +165,8 @@ export default function ChatbotWidget({
         </div>
       )}
 
-      {/* Chat panel: toggled by click */}
-      <div className="chatbot-widget__panel" aria-hidden={!isOpen}>
+      {/* Chat panel: conditionally rendered, matches other panel behavior */}
+      {isOpen && <div className="chatbot-widget__panel">
         <div className="chatbot-widget__header">
           <div className="chatbot-widget__header-main">
             <span className="chatbot-widget__title">RWC Living Atlas Helper - Beta Version</span>
@@ -175,8 +175,9 @@ export default function ChatbotWidget({
                 className="chatbot-widget__mode-toggle"
                 onClick={handleDisplayModeToggle}
                 type="button"
+                title={displayMode === 'floating' ? 'Switch to sidebar panel' : 'Switch to floating widget'}
               >
-                {displayMode === 'floating' ? 'Use Sidebar Button' : 'Use Floating Widget'}
+                {displayMode === 'floating' ? '⇄ Sidebar' : '⇄ Floating'}
               </button>
               <button
                 className="chatbot-widget__close"
@@ -232,7 +233,7 @@ export default function ChatbotWidget({
             ➤
           </button>
         </div>
-      </div>
+      </div>}
     </div>
   );
 }

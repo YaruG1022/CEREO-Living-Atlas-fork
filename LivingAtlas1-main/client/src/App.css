@@ -15,6 +15,7 @@
   --app-navbar-brand-font-size: clamp(15px, 1.35vw, 18px);
   --app-navbar-logo-width: clamp(96px, 11vw, 140px);
   --app-navbar-logo-height: calc(var(--app-navbar-height) - 2px);
+  --app-fullscreen-edge-trigger-size: 10px;
 }
 
 body {

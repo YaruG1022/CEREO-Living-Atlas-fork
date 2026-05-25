@@ -34,6 +34,13 @@ function ChangelogModal({ isOpen, onClose }) {
             <div className="changelog-modal-body">
                 {activeTab === 'latest' && (
                     <>
+                        <h3>Update Date: 5/25/2026</h3>
+                        <ul className="changelog-list">
+                          <li>Started integrating Pinecone Nexus as the next-generation RAG backend for the Living Atlas Helper Chatbot, replacing the previous local-embedding pipeline. (In progress)</li>
+                          <li>Implemented fullscreen map mode with hover-reveal top navbar and left sidebar — hovering near the top or left edge slides the corresponding UI element into view, with full panel support.</li>
+                          <li>Redesigned the chatbot floating widget and sidebar panel to match the visual style of other panels (Upload Panel, Custom Layers, Basemap) — consistent background, header, buttons, and color scheme.</li>
+                        </ul>
+
                         <h3>Update Date: 5/16/2026</h3>
                         <ul className="changelog-list">
                           <li>Enhanced Service/Layer Info Modal with improved display of child layers, legends, positioning, and active state indicators.</li>
@@ -79,7 +86,7 @@ function ChangelogModal({ isOpen, onClose }) {
 
                                                 <h4>Map Controls</h4>
                                                 <ul className="changelog-list">
-                                                    <li>Improve fullscreen mode by allowing top navbar, left sidebar, and other UI elements to slide out when hovering near the corresponding map edges, with support for opening the related panels and pages.</li>
+                                                    <li>Continue expanding fullscreen mode with additional accessibility and panel interaction improvements.</li>
                                                 </ul>
                     </>
                 )}

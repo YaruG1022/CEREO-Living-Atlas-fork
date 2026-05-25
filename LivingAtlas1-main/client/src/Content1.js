@@ -714,7 +714,9 @@ const Content1 = (props) => {
     props.cardPanelWidth,
     props.isUploadPanelOpen,
     props.isCustomLayerPanelOpen,
-    props.isSidebarOpen
+    props.isSidebarOpen,
+    props.isMapFullscreen,
+    props.isChatbotSidebarOpen
   ]);
 
   // Keep map size in sync when the card panel finishes its open/close transition.
@@ -1013,7 +1015,7 @@ const Content1 = (props) => {
     map.on('draw.delete', showAll);
     map.on('draw.update', updateMarkers);
 
-    map.addControl(new mapboxgl.FullscreenControl(), 'top-left');
+    map.addControl(new mapboxgl.FullscreenControl({ container: document.documentElement }), 'top-left');
     map.addControl(new mapboxgl.NavigationControl(), 'top-left');
 
     const currentLocation = new mapboxgl.GeolocateControl({
@@ -1545,16 +1547,18 @@ const Content1 = (props) => {
   const leftSidebarWidth = props.isSidebarOpen
     ? 'var(--app-left-sidebar-expanded-width)'
     : 'var(--app-left-sidebar-collapsed-width)';
-  const hasLeftPanel = props.isUploadPanelOpen || props.isCustomLayerPanelOpen || props.isBasemapOpen;
+  const hasLeftPanel = props.isUploadPanelOpen || props.isCustomLayerPanelOpen || props.isBasemapOpen || props.isChatbotSidebarOpen;
   const cardPanelW = props.isCollapsed ? 0 : (Number(props.cardPanelWidth) || 300);
   const cardOnLeft = props.cardPanelSide === 'left';
   const bothOnLeft = cardOnLeft && !props.isCollapsed && hasLeftPanel;
   // When both card panel and upload panel are on left, they stack vertically in same column
   const cardLeftExtra = (cardOnLeft && !bothOnLeft) ? cardPanelW : 0;
-  const mapContainerLeft = hasLeftPanel
+  const mapContainerLeft = props.isMapFullscreen
+    ? 0
+    : hasLeftPanel
     ? `calc(${leftSidebarWidth} + ${cardLeftExtra}px + var(--app-secondary-panel-width))`
     : `calc(${leftSidebarWidth} + ${cardLeftExtra}px)`;
-  const mapContainerRight = cardOnLeft ? 0 : cardPanelW;
+  const mapContainerRight = props.isMapFullscreen ? 0 : (cardOnLeft ? 0 : cardPanelW);
 
   return (
     <div 

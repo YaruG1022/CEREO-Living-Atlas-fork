@@ -9,6 +9,38 @@
     overflow: hidden;
 }
 
+.app-map-fullscreen .home-container,
+.home-container.home-container--fullscreen {
+    top: 0;
+}
+
+.app-map-fullscreen .AtlasMap {
+    top: 0 !important;
+    height: 100vh !important;
+}
+
+.app-map-fullscreen #content-2 {
+    top: 0 !important;
+    height: 100vh !important;
+}
+
+.app-map-fullscreen #content-2.content-2--left {
+    left: 0 !important;
+}
+
+.app-map-fullscreen #content-2.content-2--split-top {
+    height: 100vh !important;
+}
+
+.app-map-fullscreen .upload-panel,
+.app-map-fullscreen .custom-layers-panel,
+.app-map-fullscreen .basemap-switcher-panel,
+.app-map-fullscreen .chatbot-widget--sidebar .chatbot-widget__panel {
+    top: 0 !important;
+    left: 0 !important;
+    height: 100vh !important;
+}
+
 /* Changelog modal overlay */
 .changelog-modal-overlay {
     position: fixed;

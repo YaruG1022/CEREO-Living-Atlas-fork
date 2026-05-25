@@ -26,6 +26,35 @@
     align-items: center;
     gap: clamp(6px, 1vw, 12px);
     overflow: visible;
+    transition: transform 0.24s ease, opacity 0.24s ease;
+}
+
+.app-map-fullscreen .navbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: calc(-1 * var(--app-navbar-height));
+    z-index: 1100;
+    transform: none;
+    opacity: 0.98;
+    transition: top 0.24s ease, opacity 0.24s ease;
+}
+
+.app-map-fullscreen .navbar::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: calc(-1 * var(--app-fullscreen-edge-trigger-size));
+    height: var(--app-fullscreen-edge-trigger-size);
+    background: transparent;
+    pointer-events: auto;
+}
+
+.app-map-fullscreen .navbar:hover,
+.app-map-fullscreen .navbar:focus-within {
+    top: 0;
+    opacity: 1;
 }
 
 .navbar ul {

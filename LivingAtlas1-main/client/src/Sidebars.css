@@ -23,8 +23,39 @@
     top: var(--app-navbar-height); /* Place the sidebar below the navbar */
     left: 0;
     z-index: 1000;
-    transition: width 0.3s ease;
+    transition: width 0.3s ease, left 0.24s ease, transform 0.24s ease, opacity 0.24s ease;
     overflow: hidden;
+}
+
+.app-map-fullscreen .left-sidebar {
+    --atlas-fullscreen-sidebar-width: var(--app-left-sidebar-collapsed-width);
+    top: 0;
+    left: calc(-1 * var(--atlas-fullscreen-sidebar-width));
+    height: 100vh;
+    transform: none;
+    overflow: visible;
+    opacity: 0.98;
+}
+
+.app-map-fullscreen .left-sidebar::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: calc(-1 * var(--app-fullscreen-edge-trigger-size));
+    width: var(--app-fullscreen-edge-trigger-size);
+    height: 100%;
+    background: transparent;
+    pointer-events: auto;
+}
+
+.app-map-fullscreen .left-sidebar.open {
+    --atlas-fullscreen-sidebar-width: var(--app-left-sidebar-expanded-width);
+}
+
+.app-map-fullscreen .left-sidebar:hover,
+.app-map-fullscreen .left-sidebar:focus-within {
+    left: 0;
+    opacity: 1;
 }
 
 .left-sidebar.open {
@@ -145,10 +176,19 @@
     transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
 }
 
+.app-map-fullscreen .search-mini-modal {
+    top: 0;
+    left: var(--app-fullscreen-edge-trigger-size);
+}
+
 .search-mini-modal--open {
     pointer-events: all;
     opacity: 1;
     transform: translateX(0);
+}
+
+.app-map-fullscreen .left-sidebar-content {
+    height: calc(100vh - 20px);
 }
 
 .search-mini-form {
@@ -325,6 +365,11 @@
     z-index: 1000; /* Ensures it is above the map */
     transition: width 0.3s ease; /* Smooth transition effect */
   }
+
+.app-map-fullscreen #right-sidebar {
+        top: 0;
+        height: 100vh;
+}
   
 /*
 .add-card-button {

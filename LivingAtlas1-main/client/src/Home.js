@@ -79,6 +79,7 @@ function Home(props) {
     const [isGeneralOnboardingTourOpen, setIsGeneralOnboardingTourOpen] = useState(false);
     const [chatbotDisplayMode, setChatbotDisplayMode] = useState('floating');
     const [isChatbotOpen, setIsChatbotOpen] = useState(false);
+    const [isMapFullscreen, setIsMapFullscreen] = useState(false);
 
     const closeChangelog = () => {
         localStorage.setItem('changelog_seen_v16', 'true');
@@ -122,6 +123,29 @@ function Home(props) {
         return () => {
             document.body.style.overflow = previousOverflow;
             document.body.style.overscrollBehaviorY = previousOverscrollBehaviorY;
+        };
+    }, []);
+
+    useEffect(() => {
+        const updateFullscreenState = () => {
+            const fullscreenElement = document.fullscreenElement;
+            const isFullscreenActive = !!fullscreenElement && (
+                fullscreenElement === document.documentElement ||
+                fullscreenElement.classList?.contains('AtlasMap__container') ||
+                fullscreenElement.classList?.contains('AtlasMap') ||
+                !!fullscreenElement.closest?.('.AtlasMap')
+            );
+
+            setIsMapFullscreen(isFullscreenActive);
+            document.documentElement.classList.toggle('app-map-fullscreen', isFullscreenActive);
+        };
+
+        updateFullscreenState();
+        document.addEventListener('fullscreenchange', updateFullscreenState);
+
+        return () => {
+            document.removeEventListener('fullscreenchange', updateFullscreenState);
+            document.documentElement.classList.remove('app-map-fullscreen');
         };
     }, []);
 
@@ -1086,7 +1110,7 @@ function Home(props) {
     };
 
     return (
-        <div className="home-container">
+        <div className={`home-container${isMapFullscreen ? ' home-container--fullscreen' : ''}`}>
             <div className={`left-sidebar ${isSidebarOpen ? 'open' : ''}`} data-onboarding-target="left-sidebar-root">
                 {/* Left Sidebar Search Button */}
                 <button
@@ -1298,10 +1322,12 @@ function Home(props) {
                 isUploadPanelOpen={isUploadPanelOpen}
                 isCustomLayerPanelOpen={isCustomLayerPanelOpen}
                 isBasemapOpen={isBasemapOpen}
+                isChatbotSidebarOpen={isChatbotOpen && chatbotDisplayMode === 'sidebar'}
                 selectedCardCoords={selectedCardCoords}
                 onMarkerCardSelect={setSelectedCardIdFromMap}
                 cardPanelWidth={cardPanelWidth}
                 cardPanelSide={cardPanelSide}
+                isMapFullscreen={isMapFullscreen}
             />
 
             <Content2

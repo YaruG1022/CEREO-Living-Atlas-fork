@@ -36,11 +36,13 @@ function Main(props) {
                 isUploadPanelOpen={props.isUploadPanelOpen}
                 isCustomLayerPanelOpen={props.isCustomLayerPanelOpen}
                 isBasemapOpen={props.isBasemapOpen}
+                isChatbotSidebarOpen={props.isChatbotSidebarOpen}
                 isLayerPanelOpen={props.isLayerPanelOpen}
                 isModalOpen={props.isModalOpen}
                 isSidebarOpen={props.isSidebarOpen}
                 cardPanelWidth={props.cardPanelWidth}
                 cardPanelSide={props.cardPanelSide}
+                isMapFullscreen={props.isMapFullscreen}
 
                 selectedCardCoords={props.selectedCardCoords}
                 onMarkerCardSelect={props.onMarkerCardSelect}

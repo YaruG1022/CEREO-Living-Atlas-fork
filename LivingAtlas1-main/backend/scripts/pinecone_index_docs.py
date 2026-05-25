@@ -24,8 +24,8 @@ print("=== pinecone_index_docs.py starting ===", flush=True)
 try:
     from dotenv import load_dotenv
     load_dotenv(Path(__file__).resolve().parents[1] / ".env")
-except ImportError:
-    pass  # dotenv not installed — rely on env vars set externally
+except Exception as _e:
+    print(f"[dotenv] Warning: {_e}", flush=True)
 
 MAX_CHARS = 400
 LOCAL_EMBED_MODEL = os.environ.get("LOCAL_EMBED_MODEL", "BAAI/bge-small-en-v1.5")
