@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
+import { useHistory } from 'react-router-dom';
 import './Content2.css';
 import './Profile.css';
 import api from './api.js';
 import Register from './Register';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faCircleUser, faUserFriends, faKey } from '@fortawesome/free-solid-svg-icons';
+import { faCircleUser, faUserFriends, faKey, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { faEdit } from '@fortawesome/free-regular-svg-icons';
 
 function Profile(props) {
+    const history = useHistory();
     const [showRegister, setShowRegister] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [editedUsername, setEditedUsername] = useState(props.username || '');
@@ -140,6 +142,42 @@ function Profile(props) {
     const [showChangePasswordForm, setShowChangePasswordForm] = useState(false);
     const [message, setMessage] = useState('');
 
+    // Delete account modal states
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [deleteConfirmText, setDeleteConfirmText] = useState('');
+    const [deleteModalError, setDeleteModalError] = useState('');
+    const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+    const DELETE_PHRASE = 'confirm deletion';
+
+    const handleOpenDeleteModal = () => {
+        setDeleteConfirmText('');
+        setDeleteModalError('');
+        setShowDeleteModal(true);
+    };
+
+    const handleCloseDeleteModal = () => {
+        setShowDeleteModal(false);
+        setDeleteConfirmText('');
+        setDeleteModalError('');
+    };
+
+    const handleDeleteAccount = async () => {
+        if (deleteConfirmText.trim().toLowerCase() !== DELETE_PHRASE) {
+            setDeleteModalError(`Please type "${DELETE_PHRASE}" exactly to proceed.`);
+            return;
+        }
+        setIsDeletingAccount(true);
+        try {
+            await api.delete('/deleteAccount', { data: { email: props.email } });
+            if (props.onLogout) props.onLogout();
+            history.push('/login');
+        } catch (err) {
+            setDeleteModalError('Error deleting account. Please try again.');
+            console.error(err);
+            setIsDeletingAccount(false);
+        }
+    };
+
     // Toggle register visibility
     function handleOpenRegister() {
         setShowRegister(true);
@@ -183,6 +221,25 @@ function Profile(props) {
             <div className="profile-left expanded">
             <div className="about">
                 <h1 className="profile-page-title">Profile</h1>
+
+                <div className="profile-edit-bar">
+                  <div className="profile-edit-bar-text">
+                    <span className="profile-edit-bar-title">Profile Details</span>
+                    <span className="profile-edit-bar-subtitle">Manage your account information, bio, and profile image.</span>
+                  </div>
+                  <div className="profile-edit-bar-actions">
+                    {isEditing ? (
+                      <>
+                        <button className="profile-bar-btn profile-bar-btn--save" onClick={handleSaveAll}>Save</button>
+                        <button className="profile-bar-btn profile-bar-btn--cancel" onClick={handleCancelEdit}>Cancel</button>
+                      </>
+                    ) : (
+                      <button className="profile-bar-btn profile-bar-btn--edit" onClick={handleEditClick}>
+                        <FontAwesomeIcon icon={faEdit} /> Edit Profile
+                      </button>
+                    )}
+                  </div>
+                </div>
 
                 <div className="profile-image-section">
                   {isEditing ? (
@@ -268,16 +325,6 @@ function Profile(props) {
                 </div>
 
                 <div className="profile-action-row">
-                  {isEditing ? (
-                    <>
-                      <button className="profile-btn profile-btn-save" onClick={handleSaveAll}>Save</button>
-                      <button className="profile-btn profile-btn-cancel" onClick={handleCancelEdit}>Cancel</button>
-                    </>
-                  ) : (
-                    <button className="profile-btn profile-btn-edit" onClick={handleEditClick}>
-                      <FontAwesomeIcon icon={faEdit} /> Edit Profile
-                    </button>
-                  )}
                   <button className="profile-btn profile-btn-invite" onClick={handleOpenRegister}>
                     <FontAwesomeIcon icon={faUserFriends} /> Invite New User
                   </button>
@@ -334,6 +381,59 @@ function Profile(props) {
                 )}
 
                 {message && <p className="profile-message">{message}</p>}
+
+                {/* Delete account section */}
+                <div className="profile-danger-zone">
+                  <div className="profile-danger-zone-header">
+                    <span className="profile-danger-zone-title">Danger Zone</span>
+                    <span className="profile-danger-zone-desc">Permanently delete your account and all associated data.</span>
+                  </div>
+                  <button
+                    className="profile-delete-account-btn"
+                    onClick={handleOpenDeleteModal}
+                  >
+                    <FontAwesomeIcon icon={faTrash} /> Delete Account
+                  </button>
+                </div>
+
+                {/* Delete account modal */}
+                {showDeleteModal && (
+                  <div className="profile-delete-modal-overlay" onClick={handleCloseDeleteModal}>
+                    <div className="profile-delete-modal" onClick={(e) => e.stopPropagation()}>
+                      <h4 className="profile-delete-modal-title">Delete Account</h4>
+                      <p className="profile-delete-modal-subtitle">
+                        This will permanently delete your account and all associated data. This action <strong>cannot be undone</strong>.
+                      </p>
+                      <label className="profile-delete-modal-label" htmlFor="profile-delete-confirm-input">
+                        Type <strong>{DELETE_PHRASE}</strong> to confirm
+                      </label>
+                      <input
+                        id="profile-delete-confirm-input"
+                        className="profile-delete-modal-input"
+                        type="text"
+                        value={deleteConfirmText}
+                        onChange={(e) => { setDeleteConfirmText(e.target.value); setDeleteModalError(''); }}
+                        placeholder={DELETE_PHRASE}
+                        autoFocus
+                      />
+                      {deleteModalError && (
+                        <p className="profile-delete-modal-error">{deleteModalError}</p>
+                      )}
+                      <div className="profile-delete-modal-actions">
+                        <button className="profile-bar-btn profile-bar-btn--cancel" onClick={handleCloseDeleteModal}>
+                          Cancel
+                        </button>
+                        <button
+                          className="profile-delete-account-btn"
+                          onClick={handleDeleteAccount}
+                          disabled={isDeletingAccount}
+                        >
+                          {isDeletingAccount ? 'Deleting...' : 'Confirm Delete'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
             </div>
             </div>
         </div>

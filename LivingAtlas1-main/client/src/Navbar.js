@@ -125,6 +125,19 @@ function Navbar({ isLoggedIn, isAdmin, username, email, onLogout }) {
             <span className="username">{username}</span>
             {isModalOpen && (
               <div className="profile-modal" onClick={(e) => e.stopPropagation()}>
+                <div className="profile-modal-header">
+                  <div className="profile-modal-avatar-wrap">
+                    {profileImageUrl ? (
+                      <img src={profileImageUrl} alt="Profile" className="profile-modal-avatar-image" />
+                    ) : (
+                      <FontAwesomeIcon icon={faUserCircle} className="profile-modal-avatar-icon" />
+                    )}
+                  </div>
+                  <div className="profile-modal-user-meta">
+                    <div className="profile-modal-username">{username || 'User'}</div>
+                    <div className="profile-modal-email">{email || 'No email available'}</div>
+                  </div>
+                </div>
                 <ul>
                   <li>
                     <Link to="/profile" onClick={() => setIsModalOpen(false)}>Profile</Link>
