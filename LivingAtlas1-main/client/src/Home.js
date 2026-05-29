@@ -15,7 +15,7 @@ import CustomLayersPanel from './CustomLayersPanel';
 import { applyAreaVisibility } from './AreaFilter';
 import { showAll } from "./Filter.js";
 import { faLayerGroup } from '@fortawesome/free-solid-svg-icons';
-import { faBell, faMap, faObjectGroup, faInfoCircle, faCommentDots } from '@fortawesome/free-solid-svg-icons';
+import { faBell, faMap, faObjectGroup, faInfoCircle, faEarthAmericas } from '@fortawesome/free-solid-svg-icons';
 import BasemapSwitcher from './BasemapSwitcher';
 import Modal from 'react-modal';
 import ChangelogModal from './ChangelogModal';
@@ -1201,7 +1201,7 @@ function Home(props) {
                     }
                     disabled={chatbotDisplayMode === 'floating'}
                 >
-                    <FontAwesomeIcon icon={faCommentDots} />
+                    <FontAwesomeIcon icon={faEarthAmericas} />
                 </button>
 
                 {/* Basemap Switcher Panel */}

@@ -74,6 +74,11 @@
   box-shadow: 0 2px 6px rgba(74, 169, 230, 0.24);
 }
 
+.chatbot-widget__handle-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
 .chatbot-widget__handle-label {
   font-size: 13px;
   font-weight: 600;

@@ -1,4 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faEarthAmericas } from '@fortawesome/free-solid-svg-icons';
 import api from './api';
 import './ChatbotWidget.css';
 
@@ -159,7 +161,7 @@ export default function ChatbotWidget({
           aria-expanded={isOpen}
           aria-label="RWC Living Atlas Helper"
         >
-          <span className="chatbot-widget__handle-icon">💬</span>
+          <span className="chatbot-widget__handle-icon"><FontAwesomeIcon icon={faEarthAmericas} /></span>
           <span className="chatbot-widget__handle-label">RWC Living Atlas Helper</span>
           <span className="chatbot-widget__handle-arrow">{isOpen ? '✕' : ''}</span>
         </div>

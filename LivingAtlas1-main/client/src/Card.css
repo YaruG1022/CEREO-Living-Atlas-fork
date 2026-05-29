@@ -775,7 +775,7 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 8px;
   margin: -20px -24px 16px;
-  min-height: 340px;
+  height: 340px;
 }
 
 .learn-more-see-all-images-btn {
@@ -1079,12 +1079,14 @@
 .learn-more-gallery-side-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
   gap: 8px;
+  height: 340px;
 }
 
 .learn-more-gallery-tile {
   position: relative;
-  min-height: 166px;
+  height: 166px;
   border: none;
   padding: 0;
   margin: 0;
@@ -1094,7 +1096,7 @@
 }
 
 .learn-more-gallery-tile--primary {
-  min-height: 340px;
+  height: 340px;
 }
 
 .learn-more-gallery-tile--placeholder {
