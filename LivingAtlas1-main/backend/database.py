@@ -3,42 +3,56 @@ import psycopg2
 from psycopg2 import OperationalError, errorcodes, errors
 
 conn = None  # Ensure conn is always defined
+cur = None
+
+
+def _connect_from_env():
+    database_url = os.environ.get("DATABASE_URL")
+    if database_url:
+        return psycopg2.connect(database_url, connect_timeout=10)
+
+    return psycopg2.connect(
+        dbname=os.environ.get("DB_NAME", "postgres"),
+        user=os.environ.get("DB_USER", "CereoAtlas"),
+        password=os.environ.get("DB_PASSWORD", "LivingAtlas25$"),
+        host=os.environ.get("DB_HOST", "cereo-livingatlas-db.postgres.database.azure.com"),
+        port=os.environ.get("DB_PORT", "5432"),
+        sslmode=os.environ.get("DB_SSLMODE", "require"),
+        connect_timeout=10
+    )
+
+
+def get_connection():
+    """Return a live DB connection, reconnecting once if startup initialization failed."""
+    global conn, cur
+
+    if conn:
+        return conn
+
+    try:
+        conn = _connect_from_env()
+        cur = conn.cursor()
+        print("Database Connection Success!")
+        return conn
+    except Exception as e:
+        print("Unable to connect to the database")
+        print(f"Error: {e}")
+        conn = None
+        cur = None
+        return None
 
 try:
-    # Render/Cloud deployments should prefer DATABASE_URL.
-    database_url = os.environ.get("DATABASE_URL")
-
-    if database_url:
-        conn = psycopg2.connect(database_url, connect_timeout=10)
-    else:
-        # Fallback to explicit DB_* env vars, then legacy defaults for local/dev.
-        conn = psycopg2.connect(
-            dbname=os.environ.get("DB_NAME", "postgres"),
-            user=os.environ.get("DB_USER", "CereoAtlas"),
-            password=os.environ.get("DB_PASSWORD", "LivingAtlas25$"),
-            host=os.environ.get("DB_HOST", "cereo-livingatlas-db.postgres.database.azure.com"),
-            port=os.environ.get("DB_PORT", "5432"),
-            sslmode=os.environ.get("DB_SSLMODE", "require"),
-            connect_timeout=10
-        )
-
+    conn = _connect_from_env()
+    cur = conn.cursor()
     print("Database Connection Success!")
     connectionsucceeded = True
 
 except Exception as e:
     print("Unable to connect to the database")
     print(f"Error: {e}")
-
     if conn:
         conn.rollback()  # Force rollback if stuck in error state
     connectionsucceeded = False
-
-
-# Ensure cursor is only created if connection succeeded
-if conn:
-    cur = conn.cursor()
-else:
-    cur = None
 
 
 # -----------------------------------------------------------

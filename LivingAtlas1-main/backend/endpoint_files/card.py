@@ -17,6 +17,7 @@ import os
 import uuid
 import json
 import tempfile
+from database import get_connection
 from .file_utils import compress_file #importing my function that handles compressing files for use in /uploadForm
 
 
@@ -329,10 +330,11 @@ def allCards():
     while cleaning up filenames to remove the '.zip' suffix for display.
     """
     try:
-        if conn is None:
+        connection = get_connection()
+        if connection is None:
             raise HTTPException(status_code=503, detail="Database connection unavailable")
 
-        with conn.cursor() as local_cur:
+        with connection.cursor() as local_cur:
             local_cur.execute("""
             SELECT
                 u.Username,
@@ -429,6 +431,8 @@ def allCards():
 
         return {"data": data}
 
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"An error occurred while fetching all cards: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")

@@ -7,7 +7,7 @@ filterbar
 """
 
 from fastapi import APIRouter, HTTPException
-from database import conn, cur
+from database import get_connection
 
 filterbar_router = APIRouter()
 
@@ -15,7 +15,12 @@ filterbar_router = APIRouter()
 # This endpoint gives all the data with the labels in the return 
 @filterbar_router.get("/allCards")
 def allCards():
-    cur.execute("""
+    connection = get_connection()
+    if connection is None:
+        raise HTTPException(status_code=503, detail="Database connection unavailable")
+
+    with connection.cursor() as local_cur:
+        local_cur.execute("""
         SELECT 
             u.Username,
             u.Email,
@@ -80,8 +85,7 @@ def allCards():
         GROUP BY c.CardID, cat.CategoryLabel, u.Username, u.Email
         ORDER BY c.CardID DESC;
     """)
-    
-    rows = cur.fetchall()
+        rows = local_cur.fetchall()
     columns = [
         "username", "email", "title", "cardID", "category", "date", "description", "org",
         "funding", "link", "tags", "latitude", "longitude", "thumbnail_link", "images", "files"
@@ -94,8 +98,13 @@ def allCards():
 # This returns every tag label for the drop down menu.
 @filterbar_router.get("/tagList")
 def tagList():
-    cur.execute('SELECT taglabel FROM tags ORDER BY taglabel')
-    rows = cur.fetchall()
+    connection = get_connection()
+    if connection is None:
+        raise HTTPException(status_code=503, detail="Database connection unavailable")
+
+    with connection.cursor() as local_cur:
+        local_cur.execute('SELECT taglabel FROM tags ORDER BY taglabel')
+        rows = local_cur.fetchall()
     return {"tagList": rows}
 
 
@@ -213,8 +222,13 @@ async def allCardsByTag(categoryString: str = None, tagString: str = None, sortS
         elif sortSplit[0] == "OldestFirst":
             finalQUERY += " ORDER BY c.DatePosted ASC"
 
-    cur.execute(finalQUERY)
-    rows = cur.fetchall()
+    connection = get_connection()
+    if connection is None:
+        raise HTTPException(status_code=503, detail="Database connection unavailable")
+
+    with connection.cursor() as local_cur:
+        local_cur.execute(finalQUERY)
+        rows = local_cur.fetchall()
     columns = [
         "username", "email", "title", "cardID", "category", "date", "description", "org",
         "funding", "link", "tags", "latitude", "longitude", "thumbnail_link", "images", "files"
@@ -226,14 +240,13 @@ async def allCardsByTag(categoryString: str = None, tagString: str = None, sortS
 
 @filterbar_router.get("/searchBar")
 def searchBar(titleSearch: str):
-    # Always reset transaction in case of prior failure
     try:
-        conn.rollback()
-    except:
-        pass
+        connection = get_connection()
+        if connection is None:
+            raise HTTPException(status_code=503, detail="Database connection unavailable")
 
-    try:
-        cur.execute("""
+        with connection.cursor() as local_cur:
+            local_cur.execute("""
             SELECT 
                 u.Username,
                 c.Name,
@@ -275,13 +288,16 @@ def searchBar(titleSearch: str):
                             FROM CardImages ci2
                             WHERE ci2.CardID = c.CardID
                         ) img_sub
-                    ),
-                    '[]'
+                        rows = local_cur.fetchall()
                 ) AS images,
                 COALESCE(
                     json_agg(
+                except HTTPException:
+                    raise
                         DISTINCT jsonb_build_object(
-                            'fileid', f.fileid,
+                    connection = get_connection()
+                    if connection:
+                        connection.rollback()
                             'filename', f.filename,
                             'file_link', f.file_link,
                             'fileextension', f.fileextension
