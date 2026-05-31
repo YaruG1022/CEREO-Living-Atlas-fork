@@ -34,6 +34,14 @@ function ChangelogModal({ isOpen, onClose }) {
             <div className="changelog-modal-body">
                 {activeTab === 'latest' && (
                     <>
+                                                <h3>Update Date: 5/29/2026</h3>
+                                                <ul className="changelog-list">
+                                                    <li>Improved the visual appearance of the chatbot floating window for a more consistent and polished look.</li>
+                                                    <li>Refined the Learn More modal image display area by locking image frame dimensions, so uploaded image aspect ratios no longer affect the container size.</li>
+                                                    <li>Enhanced the avatar menu by adding user avatar, username, and email display.</li>
+                                                    <li>Refactored profile page layout and added an account deletion button with a dedicated confirmation modal flow.</li>
+                                                </ul>
+
                         <h3>Update Date: 5/25/2026</h3>
                         <ul className="changelog-list">
                           <li>Started integrating Pinecone Nexus as the next-generation RAG backend for the Living Atlas Helper Chatbot, replacing the previous local-embedding pipeline. (In progress)</li>
