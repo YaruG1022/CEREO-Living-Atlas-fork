@@ -329,7 +329,11 @@ def allCards():
     while cleaning up filenames to remove the '.zip' suffix for display.
     """
     try:
-        cur.execute("""
+        if conn is None:
+            raise HTTPException(status_code=503, detail="Database connection unavailable")
+
+        with conn.cursor() as local_cur:
+            local_cur.execute("""
             SELECT
                 u.Username,
                 u.Email,
@@ -412,7 +416,7 @@ def allCards():
             "location_type", "polygon_fill_color", "polygon_line_style", "images", "files", "polygon_vertices"
         ]
 
-        rows = cur.fetchall()
+            rows = local_cur.fetchall()
         data = [dict(zip(columns, row)) for row in rows]
 
         # Clean up filenames for display — remove .zip suffix

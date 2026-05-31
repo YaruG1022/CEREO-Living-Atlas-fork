@@ -1,23 +1,27 @@
+import os
 import psycopg2
 from psycopg2 import OperationalError, errorcodes, errors
 
 conn = None  # Ensure conn is always defined
 
 try:
+    # Render/Cloud deployments should prefer DATABASE_URL.
+    database_url = os.environ.get("DATABASE_URL")
 
-    # psql "host=cereo-livingatlas-db.postgres.database.azure.com port=5432 dbname=postgres user=CereoAtlas password=LivingAtlas25$ sslmode=require"
+    if database_url:
+        conn = psycopg2.connect(database_url, connect_timeout=10)
+    else:
+        # Fallback to explicit DB_* env vars, then legacy defaults for local/dev.
+        conn = psycopg2.connect(
+            dbname=os.environ.get("DB_NAME", "postgres"),
+            user=os.environ.get("DB_USER", "CereoAtlas"),
+            password=os.environ.get("DB_PASSWORD", "LivingAtlas25$"),
+            host=os.environ.get("DB_HOST", "cereo-livingatlas-db.postgres.database.azure.com"),
+            port=os.environ.get("DB_PORT", "5432"),
+            sslmode=os.environ.get("DB_SSLMODE", "require"),
+            connect_timeout=10
+        )
 
-
-    # Azure PostgreSQL database connection
-    conn = psycopg2.connect(
-        dbname="postgres",
-        user="CereoAtlas",
-        password="LivingAtlas25$",
-        host="cereo-livingatlas-db.postgres.database.azure.com",
-        port="5432",
-        sslmode="require",  # Required for Azure PostgreSQL
-        connect_timeout=10  # Fail fast if host unreachable (prevents Render port-scan timeout)
-    )
     print("Database Connection Success!")
     connectionsucceeded = True
 

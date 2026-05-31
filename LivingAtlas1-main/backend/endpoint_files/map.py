@@ -18,6 +18,8 @@ class Point(BaseModel):
 @map_router.get("/getMarkers")
 def getMarkers():
     try:
+        if conn is None:
+            raise HTTPException(status_code=503, detail="Database connection unavailable")
         with conn.cursor() as local_cur:
             local_cur.execute("""
                 SELECT
@@ -105,14 +107,19 @@ def getMarkers():
         ]
         data = [dict(zip(columns, row)) for row in rows]
         return {"data": data}
+    except HTTPException:
+        raise
     except Exception as e:
-        conn.rollback()
+        if conn:
+            conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
 # GET MARKERS WITHIN BOUNDS
 @map_router.post("/updateBoundry")
 def updateBoundry(NEpoint: Point, SWpoint: Point):
     try:
+        if conn is None:
+            raise HTTPException(status_code=503, detail="Database connection unavailable")
         with conn.cursor() as local_cur:
             local_cur.execute("""
                 SELECT 
@@ -169,6 +176,9 @@ def updateBoundry(NEpoint: Point, SWpoint: Point):
         ]
         data = [dict(zip(columns, row)) for row in rows]
         return {"data": data}
+    except HTTPException:
+        raise
     except Exception as e:
-        conn.rollback()
+        if conn:
+            conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
