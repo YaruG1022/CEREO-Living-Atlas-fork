@@ -26,6 +26,13 @@ function ChangelogHistory() {
             <div className="changelog-history-body">
                 {activeTab === 'latest' && (
                     <>
+                        <h3>Update Date: 5/31/2026</h3>
+                        <p>Migrated backend database connection credentials to Render environment variables; removed all hardcoded secrets from source code.</p>
+                        <p>Improved database connection handling, configuration validation, and endpoint error messaging.</p>
+                        <p>Updated backend dependencies to resolve compatibility issues.</p>
+                        <p>[Notice] The RWC Living Atlas database is currently out of service. Cards and user data are temporarily unavailable and will be restored as soon as possible.</p>
+                        <hr />
+
                         <h3>Update Date: 5/29/2026</h3>
                         <p>Improved the visual appearance of the chatbot floating window for a more consistent and polished look.</p>
                         <p>Refined the Learn More modal image display area by locking image frame dimensions, so uploaded image aspect ratios no longer affect the container size.</p>

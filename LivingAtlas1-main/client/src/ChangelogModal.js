@@ -34,6 +34,14 @@ function ChangelogModal({ isOpen, onClose }) {
             <div className="changelog-modal-body">
                 {activeTab === 'latest' && (
                     <>
+                        <h3>Update Date: 5/31/2026</h3>
+                        <ul className="changelog-list">
+                          <li>Migrated backend database connection credentials to Render environment variables; removed all hardcoded secrets from source code.</li>
+                          <li>Improved database connection handling, configuration validation, and endpoint error messaging.</li>
+                          <li>Updated backend dependencies to resolve compatibility issues.</li>
+                          <li>[Notice] The RWC Living Atlas database is currently out of service. Cards and user data are temporarily unavailable and will be restored as soon as possible.</li>
+                        </ul>
+
                                                 <h3>Update Date: 5/29/2026</h3>
                                                 <ul className="changelog-list">
                                                     <li>Improved the visual appearance of the chatbot floating window for a more consistent and polished look.</li>
