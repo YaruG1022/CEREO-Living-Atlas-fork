@@ -1,10 +1,7 @@
 *.pyc
-LivingAtlas1-main/backend/__pycache__/database.cpython-312.pyc
-LivingAtlas1-main/backend/endpoint_files/__pycache__/__init__.cpython-312.pyc
-LivingAtlas1-main/backend/endpoint_files/__pycache__/account.cpython-312.pyc
-LivingAtlas1-main/backend/endpoint_files/__pycache__/card.cpython-312.pyc
-LivingAtlas1-main/backend/endpoint_files/__pycache__/filterbar.cpython-312.pyc
-LivingAtlas1-main/backend/endpoint_files/__pycache__/map.cpython-312.pyc
+*.pyo
+*.pyd
+__pycache__/
 node_modules/.bin/baseline-browser-mapping
 node_modules/.bin/baseline-browser-mapping.cmd
 node_modules/.bin/baseline-browser-mapping.ps1
