@@ -410,13 +410,14 @@ def allCards():
             ORDER BY c.CardID DESC;
         """)
 
+            rows = local_cur.fetchall()
+
         columns = [
             "username", "email", "name", "title", "cardID", "category", "date", "description",
             "org", "funding", "link", "link_text", "tags", "latitude", "longitude", "thumbnail_link",
             "location_type", "polygon_fill_color", "polygon_line_style", "images", "files", "polygon_vertices"
         ]
 
-            rows = local_cur.fetchall()
         data = [dict(zip(columns, row)) for row in rows]
 
         # Clean up filenames for display — remove .zip suffix
