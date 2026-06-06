@@ -21,6 +21,13 @@ export default function ChatbotWidget({
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const widgetRef = useRef(null);
+  const dragRef = useRef({ dragging: false, startMouseX: 0, startMouseY: 0, startWidgetX: 0, startWidgetY: 0 });
+  const [snap, setSnap] = useState('right');
+  const [pos, setPos] = useState(() => ({
+    x: 0,
+    y: Math.max(40, window.innerHeight - 170),
+  }));
 
   const formatAssistantText = (rawText) => {
     if (typeof rawText !== 'string') return '';
@@ -151,12 +158,75 @@ export default function ChatbotWidget({
     }
   };
 
+  const handleDragStart = (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const rect = widgetRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const dr = dragRef.current;
+    dr.dragging = false;
+    dr.startMouseX = e.clientX;
+    dr.startMouseY = e.clientY;
+    dr.startWidgetX = rect.left;
+    dr.startWidgetY = rect.top;
+
+    const onMove = (mv) => {
+      const dx = mv.clientX - dr.startMouseX;
+      const dy = mv.clientY - dr.startMouseY;
+      if (!dr.dragging && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
+        dr.dragging = true;
+      }
+      if (dr.dragging) {
+        const newX = dr.startWidgetX + dx;
+        const newY = Math.max(0, Math.min(window.innerHeight - 50, dr.startWidgetY + dy));
+        setSnap('free');
+        setPos({ x: newX, y: newY });
+      }
+    };
+
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      if (dr.dragging) {
+        const currentRect = widgetRef.current?.getBoundingClientRect();
+        if (currentRect) {
+          const EDGE = 60;
+          if (currentRect.left < EDGE) {
+            setSnap('left');
+            setPos(prev => ({ ...prev, y: currentRect.top }));
+          } else if (window.innerWidth - currentRect.right < EDGE) {
+            setSnap('right');
+            setPos(prev => ({ ...prev, y: currentRect.top }));
+          }
+        }
+      } else {
+        setIsOpen(v => !v);
+      }
+      dr.dragging = false;
+    };
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
+  const widgetStyle = displayMode === 'floating'
+    ? (snap === 'left'
+      ? { left: 0, top: pos.y }
+      : snap === 'right'
+        ? { right: 0, top: pos.y }
+        : { left: pos.x, top: pos.y })
+    : {};
+
   return (
-    <div className={`chatbot-widget chatbot-widget--${displayMode}${splitBottom ? ' chatbot-widget--split-bottom' : ''}${isOpen ? ' chatbot-widget--open' : ''}`}>
+    <div
+      ref={widgetRef}
+      style={widgetStyle}
+      className={`chatbot-widget chatbot-widget--${displayMode} chatbot-widget--snap-${snap}${splitBottom ? ' chatbot-widget--split-bottom' : ''}${isOpen ? ' chatbot-widget--open' : ''}`}
+    >
       {displayMode === 'floating' && (
         <div
           className="chatbot-widget__handle"
-          onClick={() => setIsOpen(v => !v)}
+          onMouseDown={handleDragStart}
           role="button"
           aria-expanded={isOpen}
           aria-label="RWC Living Atlas Helper"
