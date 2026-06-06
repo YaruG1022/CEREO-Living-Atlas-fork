@@ -153,6 +153,8 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
     const [showShapeMenu, setShowShapeMenu] = useState(false);
     const [showOpacityMenu, setShowOpacityMenu] = useState(false);
     const [fillOpacity, setFillOpacity] = useState(0.15);
+    const [showImageOpacityMenu, setShowImageOpacityMenu] = useState(false);
+    const [imageOpacity, setImageOpacity] = useState(0.85);
     const [activeShape, setActiveShape] = useState(null); // 'triangle' | 'square' | 'rectangle' | 'circle' | 'dot' | 'pentagon' | 'hexagon' | null
     const [isDragMode, setIsDragMode] = useState(false);
     const [isRotateMode, setIsRotateMode] = useState(false);
@@ -179,6 +181,8 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
     fillColorRef.current = fillColor;
     const fillOpacityRef = useRef(fillOpacity); // always-current fillOpacity, safe for stale closures
     fillOpacityRef.current = fillOpacity;
+    const imageOpacityRef = useRef(imageOpacity);
+    imageOpacityRef.current = imageOpacity;
     const lineStyleRef = useRef(lineStyle);
     lineStyleRef.current = lineStyle;
     const saveToHistoryRef = useRef(null); // updated each render to capture latest vertices
@@ -195,11 +199,26 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
     const curveMarkersRef = useRef([]); // Mapbox markers for bezier control handles
     const rebuildCurveMarkersRef = useRef(null);
     const hasAutoStartedImagePlacementRef = useRef(false);
-    const imageUrlRef = useRef(initialImageUrl || '');
-    imageUrlRef.current = initialImageUrl || '';
+    const imageUrlRef = useRef(isImageMode ? (initialImageUrl || '') : '');
 
-    const imageDimensionsRef = useRef(initialImageDimensions || null);
-    imageDimensionsRef.current = initialImageDimensions || null;
+    const imageDimensionsRef = useRef(isImageMode ? (initialImageDimensions || null) : null);
+
+    // ── Image mode multi-slot state ──────────────────────────────
+    const nextImgIdRef = useRef(isImageMode && initialImageUrl ? 2 : 1);
+    const imgFileInputRef = useRef(null);
+    const [imgSlots, setImgSlots] = useState(() => {
+        if (isImageMode && initialImageUrl) {
+            return [{ id: 1, url: initialImageUrl, file: null, name: 'Image 1', vertices: initialVertices || [] }];
+        }
+        return [];
+    });
+    const [activeImgId, setActiveImgId] = useState(() =>
+        isImageMode && initialImageUrl ? 1 : null
+    );
+    const imgSlotsRef = useRef(imgSlots);
+    imgSlotsRef.current = imgSlots;
+    const activeImgIdRef = useRef(activeImgId);
+    activeImgIdRef.current = activeImgId;
 
     const POLYGON_LINE_SOURCE = 'card-polygon-draw-line';
     const POLYGON_LINE_LAYER = 'card-polygon-draw-line-layer';
@@ -245,6 +264,14 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
         if (!map || !map.getLayer(POLYGON_FILL_LAYER)) return;
         map.setPaintProperty(POLYGON_FILL_LAYER, 'fill-opacity', fillOpacity);
     }, [fillOpacity, isImageMode]);
+
+    // Update raster opacity on map when imageOpacity changes
+    useEffect(() => {
+        if (!isImageMode) return;
+        const map = window.atlasMapInstance;
+        if (!map || !map.getLayer(IMAGE_LAYER)) return;
+        map.setPaintProperty(IMAGE_LAYER, 'raster-opacity', imageOpacity);
+    }, [imageOpacity, isImageMode]);
 
     // Set crosshair cursor synchronously before paint whenever drawing mode is active.
     // useLayoutEffect runs before the browser paints, preventing the default 'grab'
@@ -326,7 +353,7 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
                         type: 'raster',
                         source: IMAGE_SOURCE,
                         paint: {
-                            'raster-opacity': 1,
+                            'raster-opacity': imageOpacityRef.current,
                             'raster-fade-duration': 0
                         }
                     });
@@ -447,7 +474,9 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
             const cLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
             circleMetaRef.current = { center: { lat: cLat, lng: cLng } };
             const el = document.createElement('div');
-            el.className = 'polygon-draw-vertex-marker';
+            el.className = 'polygon-draw-vertex-marker polygon-draw-image-center-hidden';
+            el.style.opacity = '0';
+            el.style.pointerEvents = 'none';
             const dot = document.createElement('div');
             dot.className = 'polygon-draw-vertex-dot';
             el.appendChild(dot);
@@ -1350,8 +1379,12 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
         setIsDrawing(!isImageMode);
 
         if (isImageMode) {
+            // Clear the active slot's placement only
+            setImgSlots(prev => prev.map(s =>
+                s.id === activeImgIdRef.current ? { ...s, vertices: [] } : s
+            ));
             updatePolygonOnMap([]);
-            startImageClickPlacement();
+            if (imageUrlRef.current) startImageClickPlacement();
             return;
         }
 
@@ -1557,14 +1590,200 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
     // their own dedicated useEffects above via setPaintProperty, so they must NOT trigger a
     // full teardown/reinit of the layer setup (which would make markers invisible).
 
+    // Auto-start image placement when the initial slot has no vertices yet
     useEffect(() => {
-        if (!isImageMode || !initialImageUrl) return;
-        if (initialVertices && initialVertices.length >= minimumVertexCount) return;
+        if (!isImageMode) return;
+        if (imgSlots.length === 0 || activeImgId === null) return;
+        const activeSlot = imgSlots.find(s => s.id === activeImgId);
+        if (!activeSlot || activeSlot.vertices.length >= minimumVertexCount) return;
         if (hasAutoStartedImagePlacementRef.current) return;
+        if (!imageUrlRef.current) return;
 
         hasAutoStartedImagePlacementRef.current = true;
         startImageClickPlacement();
-    }, [isImageMode, initialImageUrl, initialVertices, minimumVertexCount, startImageClickPlacement]);
+    }, [isImageMode, imgSlots, activeImgId, minimumVertexCount, startImageClickPlacement]);
+
+    // Manage static overlays for non-active placed image slots
+    const prevStaticIdsRef = useRef(new Set());
+    useEffect(() => {
+        if (!isImageMode) return;
+        const map = window.atlasMapInstance;
+        if (!map) return;
+
+        const currentIds = new Set();
+        imgSlots.forEach(slot => {
+            if (slot.id === activeImgId) return;
+            if (slot.vertices.length < 4) return;
+            currentIds.add(slot.id);
+            const srcId = `place-img-static-${slot.id}`;
+            const layId = `place-img-static-layer-${slot.id}`;
+            const coords = slot.vertices.slice(0, 4).map(v => [v.lng, v.lat]);
+            if (!map.getSource(srcId)) {
+                map.addSource(srcId, { type: 'image', url: slot.url, coordinates: coords });
+                map.addLayer({ id: layId, type: 'raster', source: srcId, paint: { 'raster-opacity': imageOpacityRef.current, 'raster-fade-duration': 0 } });
+            }
+        });
+
+        // Remove stale sources
+        prevStaticIdsRef.current.forEach(id => {
+            if (!currentIds.has(id)) {
+                const srcId = `place-img-static-${id}`;
+                const layId = `place-img-static-layer-${id}`;
+                if (map.getLayer(layId)) map.removeLayer(layId);
+                if (map.getSource(srcId)) map.removeSource(srcId);
+            }
+        });
+        prevStaticIdsRef.current = currentIds;
+
+        return () => {
+            prevStaticIdsRef.current.forEach(id => {
+                const srcId = `place-img-static-${id}`;
+                const layId = `place-img-static-layer-${id}`;
+                if (map.getLayer(layId)) map.removeLayer(layId);
+                if (map.getSource(srcId)) map.removeSource(srcId);
+            });
+        };
+    }, [isImageMode, imgSlots, activeImgId]);
+
+    // \u2500\u2500 Image slot management callbacks \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    const handleImgFileInput = useCallback((e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const allowed = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif'];
+        if (!allowed.includes((file.type || '').toLowerCase()) && !/\.(png|jpe?g|webp|gif)$/i.test(file.name || '')) {
+            alert('Supports PNG, JPG, GIF, WebP only.');
+            e.target.value = '';
+            return;
+        }
+        if (file.size > 5 * 1024 * 1024) {
+            alert('Image exceeds 5 MB limit.');
+            e.target.value = '';
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+            const url = reader.result;
+            const img = new window.Image();
+            img.onload = () => {
+                const dims = { width: img.naturalWidth, height: img.naturalHeight };
+                const currentSlots = imgSlotsRef.current;
+                const id = nextImgIdRef.current++;
+                const name = `Image ${currentSlots.length + 1}`;
+                // Save current vertices to the current active slot
+                if (activeImgIdRef.current !== null) {
+                    setImgSlots(prev => prev.map(s =>
+                        s.id === activeImgIdRef.current ? { ...s, vertices: verticesRef.current } : s
+                    ));
+                }
+                const newSlot = { id, url, file, name, vertices: [] };
+                setImgSlots(prev => [...prev, newSlot]);
+                setActiveImgId(id);
+                imageUrlRef.current = url;
+                imageDimensionsRef.current = dims;
+                // Clear vertices and start new placement
+                setVertices([]);
+                markersRef.current.forEach(m => m.remove());
+                markersRef.current = [];
+                updatePolygonOnMap([]);
+                startImageClickPlacement();
+            };
+            img.src = url;
+        };
+        reader.readAsDataURL(file);
+        e.target.value = '';
+    }, [startImageClickPlacement, updatePolygonOnMap]);
+
+    const handleSwitchImgSlot = useCallback((id) => {
+        if (id === activeImgIdRef.current) return;
+        // Save current vertices back to active slot
+        if (activeImgIdRef.current !== null) {
+            setImgSlots(prev => prev.map(s =>
+                s.id === activeImgIdRef.current ? { ...s, vertices: verticesRef.current } : s
+            ));
+        }
+        const slot = imgSlotsRef.current.find(s => s.id === id);
+        if (!slot) return;
+        setActiveImgId(id);
+        imageUrlRef.current = slot.url;
+        imageDimensionsRef.current = null;
+        const newVerts = slot.vertices || [];
+        setVertices(newVerts);
+        updatePolygonOnMap(newVerts);
+        rebuildMarkers(newVerts);
+        if (isDragMode) { stopDragMode(); setIsDragMode(false); }
+        if (isRotateMode) { stopRotateMode(); setIsRotateMode(false); }
+        if (isResizeMode) { stopResizeMode(); setIsResizeMode(false); }
+        if (mapClickHandlerRef.current) {
+            window.atlasMapInstance?.off('click', mapClickHandlerRef.current);
+            mapClickHandlerRef.current = null;
+            const mc = window.atlasMapInstance;
+            if (mc) mc.getCanvas().style.cursor = '';
+        }
+        if (newVerts.length < 4) {
+            startImageClickPlacement();
+        } else {
+            setIsDrawing(false);
+        }
+    }, [updatePolygonOnMap, rebuildMarkers, isDragMode, stopDragMode, isRotateMode, stopRotateMode, isResizeMode, stopResizeMode, startImageClickPlacement]);
+
+    const handleRemoveImgSlot = useCallback((id, e) => {
+        e.stopPropagation();
+        const map = window.atlasMapInstance;
+        // Remove static overlay if it exists
+        if (map) {
+            const srcId = `place-img-static-${id}`;
+            const layId = `place-img-static-layer-${id}`;
+            if (map.getLayer(layId)) map.removeLayer(layId);
+            if (map.getSource(srcId)) map.removeSource(srcId);
+            prevStaticIdsRef.current.delete(id);
+        }
+        const currentSlots = imgSlotsRef.current;
+        const slotIdx = currentSlots.findIndex(s => s.id === id);
+        if (slotIdx < 0) return;
+        const newSlots = currentSlots.filter(s => s.id !== id);
+        setImgSlots(newSlots);
+
+        if (activeImgIdRef.current === id) {
+            if (newSlots.length > 0) {
+                const newActive = newSlots[Math.min(slotIdx, newSlots.length - 1)];
+                setActiveImgId(newActive.id);
+                imageUrlRef.current = newActive.url;
+                imageDimensionsRef.current = null;
+                const newVerts = newActive.vertices || [];
+                setVertices(newVerts);
+                updatePolygonOnMap(newVerts);
+                rebuildMarkers(newVerts);
+                if (isDragMode) { stopDragMode(); setIsDragMode(false); }
+                if (isRotateMode) { stopRotateMode(); setIsRotateMode(false); }
+                if (isResizeMode) { stopResizeMode(); setIsResizeMode(false); }
+                if (mapClickHandlerRef.current) {
+                    window.atlasMapInstance?.off('click', mapClickHandlerRef.current);
+                    mapClickHandlerRef.current = null;
+                    const mc2 = window.atlasMapInstance;
+                    if (mc2) mc2.getCanvas().style.cursor = '';
+                }
+                if (newVerts.length < 4) {
+                    startImageClickPlacement();
+                } else {
+                    setIsDrawing(false);
+                }
+            } else {
+                setActiveImgId(null);
+                imageUrlRef.current = '';
+                setVertices([]);
+                updatePolygonOnMap([]);
+                markersRef.current.forEach(m => m.remove());
+                markersRef.current = [];
+                setIsDrawing(false);
+                if (mapClickHandlerRef.current) {
+                    window.atlasMapInstance?.off('click', mapClickHandlerRef.current);
+                    mapClickHandlerRef.current = null;
+                    const mc3 = window.atlasMapInstance;
+                    if (mc3) mc3.getCanvas().style.cursor = '';
+                }
+            }
+        }
+    }, [updatePolygonOnMap, rebuildMarkers, isDragMode, stopDragMode, isRotateMode, stopRotateMode, isResizeMode, stopResizeMode, startImageClickPlacement]);
 
     // Stop drawing mode (finish polygon)
     const handleFinishDrawing = () => {
@@ -1624,11 +1843,29 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
     };
 
     const handleSave = () => {
-        if (vertices.length < minimumVertexCount) {
-            alert(isImageMode ? 'An image overlay needs 4 corner points.' : 'A polygon needs at least 3 points.');
+        if (isImageMode) {
+            // Sync current active slot's live vertices
+            const updatedSlots = imgSlotsRef.current.map(s =>
+                s.id === activeImgIdRef.current ? { ...s, vertices: verticesRef.current } : s
+            );
+            const placedSlots = updatedSlots.filter(s => s.vertices.length >= 4);
+            if (placedSlots.length === 0) {
+                alert('Please add and place at least one image (click the map to position it).');
+                return;
+            }
+            const firstVerts = placedSlots[0].vertices;
+            const centroid = firstVerts.reduce(
+                (acc, v) => ({ lat: acc.lat + v.lat / firstVerts.length, lng: acc.lng + v.lng / firstVerts.length }),
+                { lat: 0, lng: 0 }
+            );
+            onSave(firstVerts, centroid, { lineStyle, fillColor, fillOpacity, imageOpacity }, placedSlots);
             return;
         }
-        // Compute centroid for lat/lng fieldssetShowShapeMenu(false); 
+        if (vertices.length < minimumVertexCount) {
+            alert('A polygon needs at least 3 points.');
+            return;
+        }
+        // Compute centroid for lat/lng fields
         const centroid = vertices.reduce(
             (acc, v) => ({ lat: acc.lat + v.lat / vertices.length, lng: acc.lng + v.lng / vertices.length }),
             { lat: 0, lng: 0 }
@@ -1813,6 +2050,34 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
                     )}
                 </div>
                 )}
+                {isImageMode && (
+                <div className="polygon-draw-style-btn-wrap">
+                    <button
+                        type="button"
+                        className="polygon-draw-style-btn"
+                        title="Image Opacity"
+                        onClick={() => { setShowImageOpacityMenu(v => !v); }}
+                    >
+                        <span className="polygon-draw-opacity-swatch" style={{ opacity: imageOpacity * 0.85 + 0.15 }} />
+                    </button>
+                    {showImageOpacityMenu && (
+                        <div className="polygon-draw-dropdown polygon-draw-opacity-dropdown">
+                            <label className="polygon-draw-opacity-label">
+                                Opacity: {Math.round(imageOpacity * 100)}%
+                            </label>
+                            <input
+                                type="range"
+                                className="polygon-draw-opacity-slider"
+                                min="0"
+                                max="1"
+                                step="0.01"
+                                value={imageOpacity}
+                                onChange={(e) => setImageOpacity(parseFloat(e.target.value))}
+                            />
+                        </div>
+                    )}
+                </div>
+                )}
                 {/* Move / drag whole polygon */}
                 <div className="polygon-draw-style-btn-wrap">
                     <button
@@ -1879,7 +2144,7 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
                         type="button"
                         className="polygon-draw-style-btn polygon-draw-clear-btn"
                         title="Clear All"
-                        disabled={vertices.length === 0}
+                        disabled={isImageMode ? vertices.length === 0 : vertices.length === 0}
                         onClick={handleClearAll}
                     >
                         <FontAwesomeIcon icon={faTrash} style={{ fontSize: 13, width: 15, height: 15 }} />
@@ -1887,19 +2152,68 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
                 </div>
             </div>
 
+            {isImageMode ? (
+                <div className="polygon-draw-modal-images">
+                    {imgSlots.length === 0 && (
+                        <div className="polygon-draw-modal-empty">Click "Add Image" to start</div>
+                    )}
+                    {imgSlots.map((slot) => {
+                        const isActive = slot.id === activeImgId;
+                        const placed = isActive ? vertices.length >= 4 : slot.vertices.length >= 4;
+                        return (
+                            <div
+                                key={slot.id}
+                                className={`polygon-draw-image-slot${isActive ? ' polygon-draw-image-slot--active' : ''}`}
+                                onClick={() => handleSwitchImgSlot(slot.id)}
+                                role="button"
+                                tabIndex={0}
+                                onKeyDown={ev => { if (ev.key === 'Enter' || ev.key === ' ') handleSwitchImgSlot(slot.id); }}
+                            >
+                                <div className="polygon-draw-image-slot-preview">
+                                    {slot.url && <img src={slot.url} alt={slot.name} />}
+                                </div>
+                                <div className="polygon-draw-image-slot-info">
+                                    <span className="polygon-draw-image-slot-name">{slot.name}</span>
+                                    <span className={`polygon-draw-image-slot-status${placed ? ' placed' : ''}`}>
+                                        {placed ? '✓ Placed' : 'Not placed'}
+                                    </span>
+                                </div>
+                                <button
+                                    type="button"
+                                    className="polygon-draw-image-slot-remove"
+                                    onClick={(ev) => handleRemoveImgSlot(slot.id, ev)}
+                                    title="Remove image"
+                                    aria-label="Remove image"
+                                >
+                                    ×
+                                </button>
+                            </div>
+                        );
+                    })}
+                    <button
+                        type="button"
+                        className="polygon-draw-image-add-btn"
+                        onClick={() => imgFileInputRef.current?.click()}
+                    >
+                        + Add Image
+                    </button>
+                    <input
+                        ref={imgFileInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/gif,image/webp"
+                        style={{ display: 'none' }}
+                        onChange={handleImgFileInput}
+                    />
+                </div>
+            ) : (
             <div className="polygon-draw-modal-vertices">
                 {vertices.length === 0 && (
                     <div className="polygon-draw-modal-empty">No points yet</div>
                 )}
-                {circleMetaRef.current || (isImageMode && vertices.length >= 4) ? (
+                {circleMetaRef.current ? (
                     (() => {
-                        const isImg = isImageMode && vertices.length >= 4;
-                        const cLat = isImg
-                            ? (Math.min(...vertices.map(v => v.lat)) + Math.max(...vertices.map(v => v.lat))) / 2
-                            : circleMetaRef.current.center.lat;
-                        const cLng = isImg
-                            ? (Math.min(...vertices.map(v => v.lng)) + Math.max(...vertices.map(v => v.lng))) / 2
-                            : circleMetaRef.current.center.lng;
+                        const cLat = circleMetaRef.current.center.lat;
+                        const cLng = circleMetaRef.current.center.lng;
                         return (
                     <div className="polygon-draw-modal-vertex-row">
                         <span className="polygon-draw-modal-vertex-num">●</span>
@@ -1990,20 +2304,19 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
                                     title="Longitude"
                                 />
                             </div>
-                            {!isImageMode && (
-                                <button
-                                    type="button"
-                                    className="polygon-draw-modal-vertex-remove"
-                                    onClick={() => handleRemoveVertex(i)}
-                                    title="Remove"
-                                >
-                                    &times;
-                                </button>
-                            )}
+                            <button
+                                type="button"
+                                className="polygon-draw-modal-vertex-remove"
+                                onClick={() => handleRemoveVertex(i)}
+                                title="Remove"
+                            >
+                                &times;
+                            </button>
                         </div>
                     ))
                 )}
             </div>
+            )}
 
             <div className="polygon-draw-modal-actions">
                 {!isImageMode && isDrawing && vertices.length >= 3 && (
@@ -2028,7 +2341,9 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
                     type="button"
                     className="polygon-draw-modal-btn polygon-draw-modal-btn-save"
                     onClick={handleSave}
-                    disabled={vertices.length < minimumVertexCount}
+                    disabled={isImageMode
+                        ? imgSlots.filter(s => (s.id === activeImgId ? vertices : s.vertices).length >= 4).length === 0
+                        : vertices.length < minimumVertexCount}
                 >
                     Save
                 </button>

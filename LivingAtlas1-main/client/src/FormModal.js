@@ -51,12 +51,14 @@ const FormModal = (props) => {
 
     useEffect(() => {
         if (props.initialImageOverlayData) {
-            const { vertices, centroid, imageFile, previewUrl } = props.initialImageOverlayData;
+            const { vertices, centroid, imageFile, previewUrl, imageSlots, style } = props.initialImageOverlayData;
             setLocationType('image');
             setPolygonVertices(vertices || []);
             setOverlayImageFile(imageFile || null);
             setOverlayImagePreview(previewUrl || '');
             setIsPlacingImageOverlay(false);
+            setOverlayImageSlots(imageSlots || []);
+            if (style?.imageOpacity !== undefined) setOverlayImageOpacity(style.imageOpacity);
             setFormData(prev => ({
                 ...prev,
                 latitude: centroid?.lat?.toFixed(6) || prev.latitude,
@@ -126,6 +128,8 @@ const FormModal = (props) => {
     const [imagePreviews, setImagePreviews] = useState([]);
     const [overlayImageFile, setOverlayImageFile] = useState(null);
     const [overlayImagePreview, setOverlayImagePreview] = useState('');
+    const [overlayImageSlots, setOverlayImageSlots] = useState([]);
+    const [overlayImageOpacity, setOverlayImageOpacity] = useState(0.85);
     const [pendingArcgisItems, setPendingArcgisItems] = useState([]);
     const [isArcgisPickerOpen, setIsArcgisPickerOpen] = useState(false);
     const imageInputRef = useRef(null);
@@ -196,8 +200,9 @@ const FormModal = (props) => {
         if (locationType === 'polygon') {
             if (polygonVertices.length < 3) errors.push("Polygon must have at least 3 points.");
         } else if (locationType === 'image') {
-            if (polygonVertices.length < 4) errors.push("Image overlay must have 4 corner points.");
-            if (!overlayImageFile && !overlayImagePreview) errors.push("A PNG image is required for the map image overlay.");
+            const placedSlots = overlayImageSlots.filter(s => s.vertices && s.vertices.length >= 4);
+            if (placedSlots.length === 0 && polygonVertices.length < 4) errors.push("Image overlay must have at least one placed image.");
+            if (!overlayImageFile && !overlayImagePreview && placedSlots.length === 0) errors.push("At least one image is required for the map overlay.");
         } else {
             if (!/^(-?\d+(\.\d{1,8})?)$/.test(formData.latitude)) errors.push("Latitude format is invalid.");
             if (!/^(-?\d+(\.\d{1,8})?)$/.test(formData.longitude)) errors.push("Longitude format is invalid.");
@@ -243,7 +248,8 @@ const FormModal = (props) => {
             formData2.append('polygon_coordinates', JSON.stringify({
                 vertices: polygonVertices,
                 fillColor: polygonFillColor,
-                lineStyle: polygonLineStyle
+                lineStyle: polygonLineStyle,
+                ...(locationType === 'image' ? { imageOpacity: overlayImageOpacity } : {})
             }));
             formData2.append('polygon_fill_color', polygonFillColor);
             formData2.append('polygon_line_style', polygonLineStyle);
@@ -261,6 +267,11 @@ const FormModal = (props) => {
             if (overlayImageFile) {
                 formData2.append('thumbnail', overlayImageFile);
             }
+            // Extra image slots (additional map overlays)
+            const extraSlots = overlayImageSlots.slice(1).filter(s => s.file);
+            extraSlots.forEach(slot => {
+                formData2.append('images', slot.file);
+            });
             imageFiles.forEach((file) => {
                 formData2.append('images', file);
             });
@@ -647,17 +658,31 @@ const FormModal = (props) => {
                         <div className="form-modal-location-content form-modal-polygon-section">
                             <p className="form-modal-location-description">Place a georeferenced image overlay (PNG, JPG/JPEG, GIF, WebP) onto the map using four corner points.</p>
                             <button type="button" className="location_button" onClick={handleStartImageOverlayPlacement}>
-                                Add Image to Map
+                                {overlayImageSlots.some(s => s.vertices && s.vertices.length >= 4) || polygonVertices.length >= 4
+                                    ? 'Edit Image Placement'
+                                    : 'Add Image to Map'}
                             </button>
-                            {polygonVertices.length >= 4 && (() => {
-                                const cLat = polygonVertices.reduce((s, v) => s + v.lat, 0) / polygonVertices.length;
-                                const cLng = polygonVertices.reduce((s, v) => s + v.lng, 0) / polygonVertices.length;
-                                return (
-                                    <div className="form-modal-polygon-summary">
-                                        <span className="form-modal-polygon-check">&#10003;</span>
-                                        Image placed (center: {cLat.toFixed(4)}, {cLng.toFixed(4)})
-                                    </div>
-                                );
+                            {(() => {
+                                const placedCount = overlayImageSlots.filter(s => s.vertices && s.vertices.length >= 4).length;
+                                if (placedCount > 0) {
+                                    return (
+                                        <div className="form-modal-polygon-summary">
+                                            <span className="form-modal-polygon-check">&#10003;</span>
+                                            {placedCount} image{placedCount > 1 ? 's' : ''} placed
+                                        </div>
+                                    );
+                                }
+                                if (polygonVertices.length >= 4) {
+                                    const cLat = polygonVertices.reduce((s, v) => s + v.lat, 0) / polygonVertices.length;
+                                    const cLng = polygonVertices.reduce((s, v) => s + v.lng, 0) / polygonVertices.length;
+                                    return (
+                                        <div className="form-modal-polygon-summary">
+                                            <span className="form-modal-polygon-check">&#10003;</span>
+                                            Image placed (center: {cLat.toFixed(4)}, {cLng.toFixed(4)})
+                                        </div>
+                                    );
+                                }
+                                return null;
                             })()}
                         </div>
                     )}

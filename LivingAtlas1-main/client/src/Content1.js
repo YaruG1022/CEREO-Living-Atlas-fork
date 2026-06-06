@@ -265,10 +265,6 @@ const Content1 = (props) => {
   const [bounds, setBounds] = useState({});
   const [isPolygonToolDrawing, setIsPolygonToolDrawing] = useState(false);
   const [isImageToolDrawing, setIsImageToolDrawing] = useState(false);
-  const [pendingMapImageFile, setPendingMapImageFile] = useState(null);
-  const [pendingMapImageDimensions, setPendingMapImageDimensions] = useState(null);
-  const [pendingMapImageUrl, setPendingMapImageUrl] = useState('');
-  const imageToolInputRef = useRef(null);
   const markersVisibleRef = useRef(true);
 
   const closeMarkerPopup = useCallback(() => {
@@ -314,45 +310,6 @@ const Content1 = (props) => {
     const contentType = response.headers?.['content-type'] || 'image/png';
     return arrayBufferToDataUrl(response.data, contentType);
   }, [arrayBufferToDataUrl, resolveImageUrl]);
-
-  const handleImageToolInputChange = useCallback((e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const allowedTypes = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif']);
-    const hasValidType = allowedTypes.has((file.type || '').toLowerCase());
-    const hasValidExtension = /\.(png|jpe?g|webp|gif)$/i.test(file.name || '');
-
-    if (!hasValidType && !hasValidExtension) {
-      alert('The map image tool supports PNG, JPG, JPEG, GIF, and WebP files.');
-      e.target.value = '';
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result !== 'string') {
-        alert('Unable to load the selected image file.');
-        return;
-      }
-
-      setPendingMapImageFile(file);
-      setPendingMapImageUrl(reader.result);
-      const img = new window.Image();
-      img.onload = () => setPendingMapImageDimensions({ width: img.naturalWidth, height: img.naturalHeight });
-      img.src = reader.result;
-      setIsImageToolDrawing(true);
-    };
-    reader.onerror = () => {
-      alert('Unable to load the selected image file.');
-    };
-    reader.readAsDataURL(file);
-    e.target.value = '';
-  }, []);
-
-  const handleStartImageToolFlow = useCallback(() => {
-    imageToolInputRef.current?.click();
-  }, []);
 
   const buildMarkerPopupContent = useCallback((feature) => {
     const root = document.createElement('div');
@@ -1537,11 +1494,12 @@ const Content1 = (props) => {
 
   useEffect(() => {
     const handler = () => {
-      handleStartImageToolFlow();
+      // Directly open the modal without requiring a file first
+      setIsImageToolDrawing(true);
     };
     window.addEventListener('map-image-tool-start', handler);
     return () => window.removeEventListener('map-image-tool-start', handler);
-  }, [handleStartImageToolFlow]);
+  }, []);
 
   // Compute styles for outer map container to respond to card panel state
   const leftSidebarWidth = props.isSidebarOpen
@@ -1570,13 +1528,6 @@ const Content1 = (props) => {
       }}
     >
       <div className="AtlasMap__container" ref={mapContainerRef}>
-        <input
-          ref={imageToolInputRef}
-          type="file"
-          accept=".png,.jpg,.jpeg,.gif,.webp,image/png,image/jpeg,image/jpg,image/gif,image/webp"
-          style={{ display: 'none' }}
-          onChange={handleImageToolInputChange}
-        />
         <div className="AtlasMap__info-bottomleft">
           <div>
             Map Center - Lat: {lat} | Long: {lng} | Zoom: {zoom}
@@ -1608,31 +1559,26 @@ const Content1 = (props) => {
         />
       )}
 
-      {isImageToolDrawing && pendingMapImageUrl && (
+      {isImageToolDrawing && (
         <PolygonDrawingModal
           mode="image"
           title="Place Image"
-          initialImageUrl={pendingMapImageUrl}
-          initialImageDimensions={pendingMapImageDimensions}
-          onSave={(vertices, centroid) => {
+          onSave={(vertices, centroid, style, imageSlots) => {
             setIsImageToolDrawing(false);
+            const firstSlot = imageSlots?.[0];
             window.dispatchEvent(new CustomEvent('map-image-tool-save', {
               detail: {
-                vertices,
+                vertices: firstSlot?.vertices || vertices || [],
                 centroid,
-                imageFile: pendingMapImageFile,
-                previewUrl: pendingMapImageUrl
+                imageFile: firstSlot?.file || null,
+                previewUrl: firstSlot?.url || '',
+                imageSlots: imageSlots || [],
+                style: style || {},
               }
             }));
-            setPendingMapImageFile(null);
-            setPendingMapImageUrl('');
-            setPendingMapImageDimensions(null);
           }}
           onCancel={() => {
             setIsImageToolDrawing(false);
-            setPendingMapImageFile(null);
-            setPendingMapImageUrl('');
-            setPendingMapImageDimensions(null);
             window.dispatchEvent(new CustomEvent('map-image-tool-cancel'));
           }}
         />
