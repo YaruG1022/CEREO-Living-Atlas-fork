@@ -173,6 +173,7 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
     const linesSourceAdded = useRef(false);
     const fillSourceAdded = useRef(false);
     const imageSourceAdded = useRef(false);
+    const imageSourceUrlRef = useRef(''); // tracks the URL currently loaded in IMAGE_SOURCE
     const mapClickHandlerRef = useRef(null);
     const modalRef = useRef(null);
     const verticesRef = useRef(vertices); // always-current vertices, safe for use inside stale closures
@@ -331,19 +332,33 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
         if (isImageMode) {
             const imageCoords = verts.slice(0, 4).map(v => [v.lng, v.lat]);
             if (imageCoords.length >= 4 && imageUrlRef.current) {
-                if (!map.getSource(IMAGE_SOURCE)) {
+                const existingSource = map.getSource(IMAGE_SOURCE);
+                if (!existingSource) {
+                    // Fresh add
                     map.addSource(IMAGE_SOURCE, {
                         type: 'image',
                         url: imageUrlRef.current,
                         coordinates: imageCoords
                     });
+                    imageSourceUrlRef.current = imageUrlRef.current;
+                    imageSourceAdded.current = true;
+                } else if (imageSourceUrlRef.current !== imageUrlRef.current) {
+                    // URL changed — must remove and re-add (setCoordinates won't update the image)
+                    if (map.getLayer(IMAGE_LAYER)) map.removeLayer(IMAGE_LAYER);
+                    map.removeSource(IMAGE_SOURCE);
+                    map.addSource(IMAGE_SOURCE, {
+                        type: 'image',
+                        url: imageUrlRef.current,
+                        coordinates: imageCoords
+                    });
+                    imageSourceUrlRef.current = imageUrlRef.current;
                     imageSourceAdded.current = true;
                 } else {
-                    const imageSource = map.getSource(IMAGE_SOURCE);
-                    if (typeof imageSource.setCoordinates === 'function') {
-                        imageSource.setCoordinates(imageCoords);
-                    } else if (typeof imageSource.updateImage === 'function') {
-                        imageSource.updateImage({ url: imageUrlRef.current, coordinates: imageCoords });
+                    // Same URL — just update coordinates
+                    if (typeof existingSource.updateImage === 'function') {
+                        existingSource.updateImage({ url: imageUrlRef.current, coordinates: imageCoords });
+                    } else if (typeof existingSource.setCoordinates === 'function') {
+                        existingSource.setCoordinates(imageCoords);
                     }
                 }
 
@@ -362,6 +377,7 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
                 if (map.getLayer(IMAGE_LAYER)) map.removeLayer(IMAGE_LAYER);
                 if (map.getSource(IMAGE_SOURCE)) map.removeSource(IMAGE_SOURCE);
                 imageSourceAdded.current = false;
+                imageSourceUrlRef.current = '';
             }
         }
     }, [isImageMode, minimumVertexCount]);
@@ -1621,6 +1637,14 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
             if (!map.getSource(srcId)) {
                 map.addSource(srcId, { type: 'image', url: slot.url, coordinates: coords });
                 map.addLayer({ id: layId, type: 'raster', source: srcId, paint: { 'raster-opacity': imageOpacityRef.current, 'raster-fade-duration': 0 } });
+            } else {
+                // Source already exists — update coordinates in case they changed
+                const src = map.getSource(srcId);
+                if (typeof src.updateImage === 'function') {
+                    src.updateImage({ url: slot.url, coordinates: coords });
+                } else if (typeof src.setCoordinates === 'function') {
+                    src.setCoordinates(coords);
+                }
             }
         });
 
@@ -1635,8 +1659,10 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
         });
         prevStaticIdsRef.current = currentIds;
 
+        // Capture snapshot for cleanup
+        const idsAtThisRender = new Set(currentIds);
         return () => {
-            prevStaticIdsRef.current.forEach(id => {
+            idsAtThisRender.forEach(id => {
                 const srcId = `place-img-static-${id}`;
                 const layId = `place-img-static-layer-${id}`;
                 if (map.getLayer(layId)) map.removeLayer(layId);
@@ -1669,10 +1695,17 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
                 const currentSlots = imgSlotsRef.current;
                 const id = nextImgIdRef.current++;
                 const name = `Image ${currentSlots.length + 1}`;
+                // Capture values NOW before any setState calls.
+                // Using verticesRef.current inside a functional updater is unsafe because
+                // React processes useState hooks in declaration order; by the time it processes
+                // imgSlots's updater, verticesRef.current has already been updated to the NEW
+                // vertices value (from the setVertices([]) call batched in the same render).
+                const savedVertices = verticesRef.current;
+                const savedActiveId = activeImgIdRef.current;
                 // Save current vertices to the current active slot
-                if (activeImgIdRef.current !== null) {
+                if (savedActiveId !== null) {
                     setImgSlots(prev => prev.map(s =>
-                        s.id === activeImgIdRef.current ? { ...s, vertices: verticesRef.current } : s
+                        s.id === savedActiveId ? { ...s, vertices: savedVertices } : s
                     ));
                 }
                 const newSlot = { id, url, file, name, vertices: [] };
@@ -1695,20 +1728,67 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
 
     const handleSwitchImgSlot = useCallback((id) => {
         if (id === activeImgIdRef.current) return;
-        // Save current vertices back to active slot
-        if (activeImgIdRef.current !== null) {
+        const map = window.atlasMapInstance;
+
+        // Capture values NOW before any setState calls.
+        // verticesRef.current inside a functional updater is unsafe: React processes
+        // useState hooks in declaration order, and verticesRef.current = vertices runs
+        // (line ~179) BEFORE imgSlots useState (line ~205). By the time React calls the
+        // imgSlots updater function, verticesRef.current already holds the NEW vertices
+        // (from the batched setVertices(newVerts) call), not the current slot's vertices.
+        const savedVertices = verticesRef.current;
+        const currentId = activeImgIdRef.current;
+        if (currentId !== null) {
             setImgSlots(prev => prev.map(s =>
-                s.id === activeImgIdRef.current ? { ...s, vertices: verticesRef.current } : s
+                s.id === currentId ? { ...s, vertices: savedVertices } : s
             ));
+            // Promote the old active slot to a static overlay if it has 4 vertices.
+            // All Mapbox GL state changes are queued and rendered together on the next animation
+            // frame, so we can sequence remove/add operations atomically within one JS call.
+            if (map && savedVertices.length >= 4) {
+                const oldSlot = imgSlotsRef.current.find(s => s.id === currentId);
+                if (oldSlot) {
+                    const srcId = `place-img-static-${currentId}`;
+                    const layId = `place-img-static-layer-${currentId}`;
+                    if (!map.getSource(srcId)) {
+                        // Hide IMAGE_LAYER first so that when static-A is added there is no
+                        // brief double-layer period that makes A appear more opaque than it should.
+                        if (map.getLayer(IMAGE_LAYER)) {
+                            map.setPaintProperty(IMAGE_LAYER, 'raster-opacity', 0);
+                        }
+                        const coords = savedVertices.slice(0, 4).map(v => [v.lng, v.lat]);
+                        map.addSource(srcId, { type: 'image', url: oldSlot.url, coordinates: coords });
+                        map.addLayer({ id: layId, type: 'raster', source: srcId, paint: { 'raster-opacity': imageOpacityRef.current, 'raster-fade-duration': 0 } });
+                        prevStaticIdsRef.current.add(currentId);
+                    }
+                }
+            }
         }
+
         const slot = imgSlotsRef.current.find(s => s.id === id);
         if (!slot) return;
+
+        // NOTE: Do NOT remove static-B yet. Keep it visible throughout the IMAGE_SOURCE
+        // swap so B is never invisible. We remove it after updatePolygonOnMap sets up
+        // IMAGE_LAYER for B — all in the same JS tick, rendered atomically on the next frame.
+
         setActiveImgId(id);
         imageUrlRef.current = slot.url;
         imageDimensionsRef.current = null;
         const newVerts = slot.vertices || [];
         setVertices(newVerts);
         updatePolygonOnMap(newVerts);
+
+        // NOW remove static-B: IMAGE_LAYER already shows B at this point (same JS tick),
+        // so there is no gap where B is invisible and no "reappearing" effect.
+        if (map) {
+            const srcId = `place-img-static-${id}`;
+            const layId = `place-img-static-layer-${id}`;
+            if (map.getLayer(layId)) map.removeLayer(layId);
+            if (map.getSource(srcId)) map.removeSource(srcId);
+            prevStaticIdsRef.current.delete(id);
+        }
+
         rebuildMarkers(newVerts);
         if (isDragMode) { stopDragMode(); setIsDragMode(false); }
         if (isRotateMode) { stopRotateMode(); setIsRotateMode(false); }
