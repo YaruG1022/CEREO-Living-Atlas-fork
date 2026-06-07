@@ -73,7 +73,7 @@ function Home(props) {
     const [arcgisLegend, setArcgisLegend] = useState(null);
     const [arcgisLayerAdded, setArcgisLayerAdded] = useState(false);
     const [isChangelogOpen, setIsChangelogOpen] = useState(() => {
-        return !localStorage.getItem('changelog_seen_v16');
+        return !localStorage.getItem('changelog_seen_v17');
     });
     const [isGeneralOnboardingOpen, setIsGeneralOnboardingOpen] = useState(false);
     const [isGeneralOnboardingTourOpen, setIsGeneralOnboardingTourOpen] = useState(false);
@@ -82,7 +82,7 @@ function Home(props) {
     const [isMapFullscreen, setIsMapFullscreen] = useState(false);
 
     const closeChangelog = () => {
-        localStorage.setItem('changelog_seen_v16', 'true');
+        localStorage.setItem('changelog_seen_v17', 'true');
         setIsChangelogOpen(false);
     };
 

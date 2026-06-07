@@ -34,7 +34,15 @@ function ChangelogModal({ isOpen, onClose }) {
             <div className="changelog-modal-body">
                 {activeTab === 'latest' && (
                     <>
-                        <h3>Update Date: 5/31/2026</h3>
+                        <h3>Update Date: 6/6/2026</h3>
+                        <ul className="changelog-list">
+                          <li>Made the RWC Living Atlas Helper chatbot floating widget freely draggable; snapping to the left or right screen edge collapses it.</li>
+                          <li>Overhauled the Add Card from Map – Image workflow: clicking Image now opens the placement modal directly; the sidebar lists each uploaded image with individual remove buttons and an Add Image button to browse local files; a single card can be represented by multiple images.</li>
+                          <li>Hidden the center-point marker during image overlay placement and editing; all center-point–dependent operations (move, rotate, resize) are unaffected.</li>
+                          <li>Added an opacity slider for image overlays in the placement modal, matching the existing polygon opacity control.</li>
+                          <li>Added login prompts for the Polygon and Image options in Add Card from Map, consistent with the existing Coordinate prompt.</li>
+                        </ul>
+
                         <ul className="changelog-list">
                           <li>Migrated backend database connection credentials to Render environment variables; removed all hardcoded secrets from source code.</li>
                           <li>Improved database connection handling, configuration validation, and endpoint error messaging.</li>
