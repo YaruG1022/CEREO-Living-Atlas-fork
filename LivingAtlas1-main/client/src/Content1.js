@@ -266,6 +266,10 @@ const Content1 = (props) => {
   const [isPolygonToolDrawing, setIsPolygonToolDrawing] = useState(false);
   const [isImageToolDrawing, setIsImageToolDrawing] = useState(false);
   const markersVisibleRef = useRef(true);
+  // Ref so that DOM-level click handlers (inside the map setup useEffect) can
+  // read the latest login state without going stale in their closure.
+  const isLoggedInRef = useRef(props.isLoggedIn);
+  useEffect(() => { isLoggedInRef.current = props.isLoggedIn; }, [props.isLoggedIn]);
 
   const closeMarkerPopup = useCallback(() => {
     if (markerPopupRef.current) {
@@ -845,6 +849,10 @@ const Content1 = (props) => {
           e.preventDefault();
           e.stopPropagation();
           closeAddToolsMenu();
+          if (!isLoggedInRef.current) {
+            window.dispatchEvent(new CustomEvent('atlas:login-required'));
+            return;
+          }
           setIsPolygonToolDrawing(true);
         });
 
@@ -852,6 +860,10 @@ const Content1 = (props) => {
           e.preventDefault();
           e.stopPropagation();
           closeAddToolsMenu();
+          if (!isLoggedInRef.current) {
+            window.dispatchEvent(new CustomEvent('atlas:login-required'));
+            return;
+          }
           window.dispatchEvent(new CustomEvent('map-image-tool-start'));
         });
 

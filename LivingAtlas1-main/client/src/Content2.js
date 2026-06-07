@@ -97,6 +97,13 @@ function Content2(props) {
         return () => window.removeEventListener('atlas:open-create-card-modal', handler);
     }, [props.isLoggedIn]);
 
+    // Fired by Content1's polygon/image tool buttons when the user is not logged in
+    useEffect(() => {
+        const handler = () => setShowLoginPrompt(true);
+        window.addEventListener('atlas:login-required', handler);
+        return () => window.removeEventListener('atlas:login-required', handler);
+    }, []);
+
     function useDidMount() {
         const mountRef = useRef(false);
         useEffect(() => { mountRef.current = true }, []);
