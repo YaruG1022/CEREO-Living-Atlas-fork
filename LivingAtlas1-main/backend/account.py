@@ -79,6 +79,12 @@ class SignupNotificationRequest(BaseModel):
     email: str
     desired_access_level: str
 
+# Model for user feedback submission
+class FeedbackRequest(BaseModel):
+    name: str
+    email: str
+    message: str
+
 
 class UserPreferencesUpsertRequest(BaseModel):
     email: str
@@ -253,6 +259,28 @@ def send_signup_notification(username, email, desired_access_level):
         </html>
         """
         send_via_resend(admin_email, subject, body)
+
+
+@account_router.post("/submit-feedback")
+async def submit_feedback(request: FeedbackRequest):
+    try:
+        feedback_recipient = "wsu.cereoatlas25@gmail.com"
+        subject = f"User Feedback from {request.name}"
+        body = f"""
+        <html>
+            <body>
+                <p><strong>Name:</strong> {request.name}</p>
+                <p><strong>Email:</strong> {request.email}</p>
+                <p><strong>Message:</strong></p>
+                <p>{request.message}</p>
+            </body>
+        </html>
+        """
+        send_via_resend(feedback_recipient, subject, body)
+        return {"success": True, "message": "Feedback submitted successfully."}
+    except Exception as e:
+        print(f"DEBUG: Exception in submit_feedback: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to submit feedback: {str(e)}")
 
 
 @account_router.post("/sendSignupNotification")

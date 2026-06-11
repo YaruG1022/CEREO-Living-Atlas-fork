@@ -43,3 +43,74 @@ nav {
 a:hover {
     background-color: #007BFF;
 }
+
+.feedback-form {
+    margin-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.feedback-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.feedback-field label {
+    font-weight: 600;
+    color: #444;
+    font-size: 0.95rem;
+}
+
+.feedback-field input,
+.feedback-field textarea {
+    padding: 8px 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    font-size: 0.95rem;
+    font-family: inherit;
+    resize: vertical;
+    transition: border-color 0.2s;
+}
+
+.feedback-field input:focus,
+.feedback-field textarea:focus {
+    outline: none;
+    border-color: #007BFF;
+}
+
+.feedback-submit {
+    align-self: flex-start;
+    padding: 9px 22px;
+    background-color: #007BFF;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.feedback-submit:hover:not(:disabled) {
+    background-color: #0056b3;
+}
+
+.feedback-submit:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+.feedback-msg {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.feedback-success {
+    color: #2e7d32;
+}
+
+.feedback-error {
+    color: #c62828;
+}
