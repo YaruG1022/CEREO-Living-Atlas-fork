@@ -75,7 +75,8 @@ function Card(props) {
     const [formData, setFormData] = useState({
         ...props.formData,
         files: props.formData?.files || [],      // <-- ensure files array always exists
-        filesToUpload: []                        // <-- temp storage for new uploads
+        filesToUpload: [],                       // <-- temp storage for new uploads
+        is_public: props.formData?.is_public !== false  // default true
     });
     const [loading, setLoading] = useState(false);
     const [isFavorited, setIsFavorited] = useState(false);
@@ -113,7 +114,8 @@ function Card(props) {
                     ...props.formData,
                     images: mergedImages,
                     files: props.formData?.files || [],
-                    filesToUpload: []
+                    filesToUpload: [],
+                    is_public: props.formData?.is_public !== false
                 };
             });
             setPreview(
@@ -2015,6 +2017,16 @@ function Card(props) {
                             <p><strong>Tags:</strong></p>
                             <input className="learn-more-inline-input" type="text" name="tags" value={formData.tags || ''} onChange={handleInputChange} />
 
+                            <p><strong>Visibility:</strong></p>
+                            <select
+                                className="learn-more-inline-input"
+                                value={formData.is_public !== false ? "true" : "false"}
+                                onChange={(e) => setFormData(prev => ({ ...prev, is_public: e.target.value !== "false" }))}
+                            >
+                                <option value="true">Public (visible to everyone)</option>
+                                <option value="false">Private (only visible to me)</option>
+                            </select>
+
                             <div data-onboarding-target="learn-more-coordinates-polygon">
                                 {isOverlayCard ? (
                                     <button type="button" className="learn-more-select-location-btn" onClick={handleEditPolygon}>
@@ -2068,6 +2080,7 @@ function Card(props) {
                             </div>
                             <p className="learn-more-modal-description"><strong>Description:</strong> {formData.description}</p>
                             <p><strong>Tags:</strong> {formData.tags}</p>
+                            <p><strong>Visibility:</strong> {formData.is_public !== false ? 'Public' : 'Private (only visible to you)'}</p>
                         </>
                     )}
 
@@ -2492,6 +2505,17 @@ function Card(props) {
                             value={formData.tags || ""}
                             onChange={handleInputChange}
                         />
+                    </label>
+                    <label>
+                        Visibility:
+                        <select
+                            name="is_public"
+                            value={formData.is_public !== false ? "true" : "false"}
+                            onChange={(e) => setFormData(prev => ({ ...prev, is_public: e.target.value !== "false" }))}
+                        >
+                            <option value="true">Public (visible to everyone)</option>
+                            <option value="false">Private (only visible to me)</option>
+                        </select>
                     </label>
                     <label>
                         Latitude:

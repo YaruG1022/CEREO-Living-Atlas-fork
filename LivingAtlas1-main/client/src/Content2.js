@@ -310,7 +310,8 @@ function Content2(props) {
         // Show all locally if no filters
         if (!props.CategoryCondition && !props.filterCondition && !props.searchCondition && !props.sortCondition) {
             showAll();
-            api.get('/allCards')
+            const viewerEmail = localStorage.getItem('email') || '';
+            api.get('/allCards', { params: viewerEmail ? { viewer_email: viewerEmail } : {} })
                 .then(response => {
                     const cardData = response.data?.data || [];
                     console.log('[Content2] /allCards response:', cardData.length, 'cards');
@@ -330,6 +331,8 @@ function Content2(props) {
 
         // Always fetch filtered/sorted cards from the server
         showAll();
+        const viewerEmail = localStorage.getItem('email') || '';
+        if (viewerEmail) params.viewer_email = viewerEmail;
         api.get('/allCardsByTag', { params })
             .then(response => {
                 const cardData = response.data?.data || [];

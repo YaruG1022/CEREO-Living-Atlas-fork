@@ -111,9 +111,9 @@ def tagList():
 
 # This endpoint gives all the data with the labels in the return from the filtered tag that was selected
 @filterbar_router.get("/allCardsByTag")
-async def allCardsByTag(categoryString: str = None, tagString: str = None, sortString: str = None):
+async def allCardsByTag(categoryString: str = None, tagString: str = None, sortString: str = None, viewer_email: str = None):
 
-    if categoryString is None and tagString is None and sortString is None:
+    if categoryString is None and tagString is None and sortString is None and viewer_email is None:
         return {"Parameter Error": "Need to pass something to this endpoint to return a card"}
 
     finalQUERY = ("""
@@ -170,7 +170,8 @@ async def allCardsByTag(categoryString: str = None, tagString: str = None, sortS
                     )
                 ) FILTER (WHERE f.fileid IS NOT NULL),
                 '[]'
-            ) AS files
+            ) AS files,
+            COALESCE(c.is_public, TRUE) AS is_public
     """)
 
     if sortString:
@@ -210,6 +211,19 @@ async def allCardsByTag(categoryString: str = None, tagString: str = None, sortS
                  JOIN Tags ON CardTags.TagID = Tags.TagID
                  WHERE CardTags.CardID = c.CardID AND LOWER(Tags.TagLabel) IN ({tags})) = {tag_count}
             """
+        # Append is_public filter with AND
+        finalQUERY += f" AND (COALESCE(c.is_public, TRUE) = TRUE"
+        if viewer_email:
+            safe_viewer_email = viewer_email.replace("'", "''")
+            finalQUERY += f" OR u.Email = '{safe_viewer_email}'"
+        finalQUERY += ")"
+    else:
+        # No category/tag filters but still need is_public filter
+        finalQUERY += " WHERE (COALESCE(c.is_public, TRUE) = TRUE"
+        if viewer_email:
+            safe_viewer_email = viewer_email.replace("'", "''")
+            finalQUERY += f" OR u.Email = '{safe_viewer_email}'"
+        finalQUERY += ")"
 
     finalQUERY += botStringQuery
 
@@ -231,7 +245,8 @@ async def allCardsByTag(categoryString: str = None, tagString: str = None, sortS
         rows = local_cur.fetchall()
     columns = [
         "username", "email", "title", "cardID", "category", "date", "description", "org",
-        "funding", "link", "tags", "latitude", "longitude", "thumbnail_link", "images", "files"
+        "funding", "link", "tags", "latitude", "longitude", "thumbnail_link", "images", "files",
+        "is_public"
     ]
     data = [dict(zip(columns, row)) for row in rows]
     return {"data": data}

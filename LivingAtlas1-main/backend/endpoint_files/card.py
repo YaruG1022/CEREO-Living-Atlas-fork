@@ -324,10 +324,11 @@ def get_card_by_id(card_id: int):
 
 
 @card_router.get("/allCards")
-def allCards():
+def allCards(viewer_email: Optional[str] = None):
     """
     Fetch all cards and their associated data (tags, files, etc.),
     while cleaning up filenames to remove the '.zip' suffix for display.
+    If viewer_email is provided, private cards from other users are excluded.
     """
     try:
         connection = get_connection()
@@ -396,13 +397,15 @@ def allCards():
                         WHERE pv.CardID = c.CardID
                     ),
                     '[]'
-                ) AS polygon_vertices
+                ) AS polygon_vertices,
+                COALESCE(c.is_public, TRUE) AS is_public
             FROM Cards c
             INNER JOIN Categories cat ON c.CategoryID = cat.CategoryID
             LEFT JOIN Files f ON c.CardID = f.CardID
             LEFT JOIN CardTags ct ON c.CardID = ct.CardID
             LEFT JOIN Tags t ON ct.TagID = t.TagID
             INNER JOIN Users u ON c.UserID = u.UserID
+            WHERE (COALESCE(c.is_public, TRUE) = TRUE OR u.Email = %(viewer_email)s)
             GROUP BY
                 c.CardID,
                 cat.CategoryLabel,
@@ -410,14 +413,15 @@ def allCards():
                 u.Email,
                 c.Name
             ORDER BY c.CardID DESC;
-        """)
+        """, {"viewer_email": viewer_email})
 
             rows = local_cur.fetchall()
 
         columns = [
             "username", "email", "name", "title", "cardID", "category", "date", "description",
             "org", "funding", "link", "link_text", "tags", "latitude", "longitude", "thumbnail_link",
-            "location_type", "polygon_fill_color", "polygon_line_style", "images", "files", "polygon_vertices"
+            "location_type", "polygon_fill_color", "polygon_line_style", "images", "files", "polygon_vertices",
+            "is_public"
         ]
 
         data = [dict(zip(columns, row)) for row in rows]
@@ -451,6 +455,7 @@ async def upload_form(
     original_email: Optional[str] = Form(None),
     original_title: Optional[str] = Form(None),
     requester_email: Optional[str] = Form(None),
+    is_public: Optional[str] = Form("true"),
     category: Optional[str] = Form("None"),
     latitude: Optional[str] = Form(None),
     longitude: Optional[str] = Form(None),
@@ -616,11 +621,13 @@ async def upload_form(
                 SET Name=%s, Latitude=%s, Longitude=%s, CategoryID=%s,
                     Description=%s, Organization=%s, Funding=%s, Link=%s, LinkText=%s,
                     Thumbnail_Link=COALESCE(%s, Thumbnail_Link), UserID=%s,
-                    LocationType=%s, PolygonFillColor=%s, PolygonLineStyle=%s
+                    LocationType=%s, PolygonFillColor=%s, PolygonLineStyle=%s,
+                    is_public=%s
                 WHERE CardID=%s
             """, (name, latitude_val, longitude_val, categoryID, description, org,
                   funding, link, link_text, thumbnail_url, userID, location_type or "point",
-                  polygon_fill_color or '#0077c0', polygon_line_style or 'solid', nextcardid))
+                  polygon_fill_color or '#0077c0', polygon_line_style or 'solid',
+                  (is_public or 'true').lower() != 'false', nextcardid))
             cur.execute("DELETE FROM CardTags WHERE CardID=%s", (nextcardid,))
             # Delete old polygon vertices on update
             cur.execute("DELETE FROM CardPolygonVertices WHERE CardID=%s", (nextcardid,))
@@ -629,12 +636,13 @@ async def upload_form(
                 INSERT INTO Cards
                     (CardID, UserID, Name, Title, Latitude, Longitude, CategoryID,
                      Description, Organization, Funding, Link, LinkText, Thumbnail_Link, LocationType,
-                     PolygonFillColor, PolygonLineStyle)
+                     PolygonFillColor, PolygonLineStyle, is_public)
                 VALUES
-                    (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (nextcardid, userID, name, title, latitude_val, longitude_val,
                   categoryID, description, org, funding, link, link_text, thumbnail_url, location_type or "point",
-                  polygon_fill_color or '#0077c0', polygon_line_style or 'solid'))
+                  polygon_fill_color or '#0077c0', polygon_line_style or 'solid',
+                  (is_public or 'true').lower() != 'false'))
 
         # --------------------------------------------------
         # Handle overlay vertices (polygon/image)
