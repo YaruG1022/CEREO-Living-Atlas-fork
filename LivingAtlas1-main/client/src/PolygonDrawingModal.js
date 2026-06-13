@@ -140,11 +140,50 @@ function normalizeHistorySnapshot(snapshot) {
     );
 }
 
+// ── Multi-ring helpers ─────────────────────────────────────────
+// When initialVertices contains vertices with a `ring` property (multi-polygon card),
+// the last ring is the "active" ring and earlier rings are "completed" rings.
+function parseActiveRing(initialVertices, isImageMode) {
+    if (!initialVertices || initialVertices.length === 0 || isImageMode) return initialVertices || [];
+    const hasRingProp = initialVertices.some(v => v.ring !== undefined && v.ring !== 0);
+    if (!hasRingProp) return initialVertices.map(v => ({ lat: v.lat, lng: v.lng }));
+    const ringMap = new Map();
+    for (const v of initialVertices) {
+        const r = v.ring ?? 0;
+        if (!ringMap.has(r)) ringMap.set(r, []);
+        ringMap.get(r).push({ lat: v.lat, lng: v.lng });
+    }
+    const sorted = [...ringMap.entries()].sort(([a], [b]) => a - b);
+    return sorted[sorted.length - 1][1] || [];
+}
+
+function parseCompletedRings(initialVertices, isImageMode) {
+    if (!initialVertices || initialVertices.length === 0 || isImageMode) return [];
+    const hasRingProp = initialVertices.some(v => v.ring !== undefined && v.ring !== 0);
+    if (!hasRingProp) return [];
+    const ringMap = new Map();
+    for (const v of initialVertices) {
+        const r = v.ring ?? 0;
+        if (!ringMap.has(r)) ringMap.set(r, []);
+        ringMap.get(r).push({ lat: v.lat, lng: v.lng });
+    }
+    const sorted = [...ringMap.entries()].sort(([a], [b]) => a - b);
+    return sorted.slice(0, -1).map(([, verts], i) => ({ id: i + 1, num: i + 1, vertices: verts }));
+}
+
+function parseNextRingId(initialVertices, isImageMode) {
+    if (!initialVertices || initialVertices.length === 0 || isImageMode) return 1;
+    const hasRingProp = initialVertices.some(v => v.ring !== undefined);
+    if (!hasRingProp) return 1;
+    const maxRing = Math.max(0, ...initialVertices.map(v => v.ring ?? 0));
+    return maxRing + 2;
+}
+
 const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineStyle, initialFillColor, mode = 'polygon', initialImageUrl, initialImageDimensions, title }) => {
     const isImageMode = mode === 'image';
     const minimumVertexCount = isImageMode ? 4 : 3;
     const modalTitle = title || (isImageMode ? 'Place Image' : 'Draw Polygon');
-    const [vertices, setVertices] = useState(initialVertices || []);
+    const [vertices, setVertices] = useState(() => parseActiveRing(initialVertices, isImageMode));
     const [isDrawing, setIsDrawing] = useState(!isImageMode && !(initialVertices && initialVertices.length >= minimumVertexCount));
     const [lineStyle, setLineStyle] = useState(initialLineStyle || 'solid'); // 'solid', 'dashed', 'dotted'
     const [fillColor, setFillColor] = useState(initialFillColor || DEFAULT_POLYGON_COLOR);
@@ -199,6 +238,27 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
     const curveVertexCountRef = useRef((initialVertices || []).length);
     const curveMarkersRef = useRef([]); // Mapbox markers for bezier control handles
     const rebuildCurveMarkersRef = useRef(null);
+    // ── Multi-polygon (ring) state ──────────────────────────────────────────────
+    const [completedPolygons, setCompletedPolygons] = useState(() => parseCompletedRings(initialVertices, isImageMode));
+    const completedPolygonsRef = useRef([]);
+    completedPolygonsRef.current = completedPolygons;
+    const nextRingIdRef = useRef(parseNextRingId(initialVertices, isImageMode));
+    // nextNewNumRef: counter for assigning display labels to brand-new rings (NOT editing existing)
+    const nextNewNumRef = useRef(
+        parseCompletedRings(initialVertices, isImageMode).length + 2
+    );
+    // activeRingNum: display label for the brand-new ring currently being drawn
+    const [activeRingNum, setActiveRingNum] = useState(
+        () => parseCompletedRings(initialVertices, isImageMode).length + 1
+    );
+    const activeRingNumRef = useRef(1);
+    activeRingNumRef.current = activeRingNum;
+    // activeRingId: which completedPolygon ring is currently selected for in-place editing
+    // null = drawing a brand-new ring; non-null = editing an existing completed ring
+    const [activeRingId, setActiveRingId] = useState(null);
+    const activeRingIdRef = useRef(null);
+    activeRingIdRef.current = activeRingId;
+    const completedRingLayersRef = useRef([]); // [{id, srcId, lineLayId, fillLayId}]
     const hasAutoStartedImagePlacementRef = useRef(false);
     const imageUrlRef = useRef(isImageMode ? (initialImageUrl || '') : '');
 
@@ -227,6 +287,10 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
     const POLYGON_FILL_LAYER = 'card-polygon-draw-fill-layer';
     const IMAGE_SOURCE = 'card-polygon-draw-image';
     const IMAGE_LAYER = 'card-polygon-draw-image-layer';
+    // Completed ring layer ID helpers (one set of layers per ring)
+    const compRingSrcId = (id) => `card-polygon-draw-comp-src-${id}`;
+    const compRingLineId = (id) => `card-polygon-draw-comp-line-${id}`;
+    const compRingFillId = (id) => `card-polygon-draw-comp-fill-${id}`;
 
     // Update line style on map when lineStyle changes
     useEffect(() => {
@@ -570,6 +634,152 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
         }
     }, [updatePolygonOnMap]);
     rebuildCurveMarkersRef.current = rebuildCurveMarkers;
+
+    // \u2500\u2500 Multi-polygon callbacks \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    // Add a completed ring as a static visual overlay on the map
+    const addCompletedRingToMap = useCallback((ringId, ringVertices) => {
+        if (isImageMode || ringVertices.length < 3) return;
+        const map = window.atlasMapInstance;
+        if (!map) return;
+        const srcId = compRingSrcId(ringId);
+        const lineLayId = compRingLineId(ringId);
+        const fillLayId = compRingFillId(ringId);
+        const coords = ringVertices.map(v => [v.lng, v.lat]);
+        coords.push(coords[0]);
+        if (!map.getSource(srcId)) {
+            map.addSource(srcId, {
+                type: 'geojson',
+                data: { type: 'Feature', geometry: { type: 'Polygon', coordinates: [coords] } }
+            });
+        }
+        if (!map.getLayer(fillLayId)) {
+            map.addLayer({
+                id: fillLayId,
+                type: 'fill',
+                source: srcId,
+                paint: { 'fill-color': fillColorRef.current, 'fill-opacity': fillOpacityRef.current }
+            });
+        }
+        if (!map.getLayer(lineLayId)) {
+            const dash = LINE_STYLES[lineStyleRef.current] || [];
+            map.addLayer({
+                id: lineLayId,
+                type: 'line',
+                source: srcId,
+                paint: {
+                    'line-color': fillColorRef.current,
+                    'line-width': 1.5,
+                    ...(dash.length > 0 ? { 'line-dasharray': dash } : {}),
+                }
+            });
+        }
+        completedRingLayersRef.current.push({ id: ringId, srcId, lineLayId, fillLayId });
+    }, [isImageMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Remove a completed ring's visual layers from the map
+    const removeCompletedRingFromMap = useCallback((ringId) => {
+        const map = window.atlasMapInstance;
+        if (!map) return;
+        const srcId = compRingSrcId(ringId);
+        const lineLayId = compRingLineId(ringId);
+        const fillLayId = compRingFillId(ringId);
+        if (map.getLayer(fillLayId)) map.removeLayer(fillLayId);
+        if (map.getLayer(lineLayId)) map.removeLayer(lineLayId);
+        if (map.getSource(srcId)) map.removeSource(srcId);
+        completedRingLayersRef.current = completedRingLayersRef.current.filter(l => l.id !== ringId);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Finish the active polygon and start drawing a new separate one
+    const handleNewPolygon = useCallback(() => {
+        if (isImageMode) return;
+        if (verticesRef.current.length < 3) {
+            alert('Please add at least 3 points to the current polygon before starting a new one.');
+            return;
+        }
+        saveToHistoryRef.current?.();
+        const map = window.atlasMapInstance;
+        // Detach existing map click handler
+        if (map && mapClickHandlerRef.current) {
+            map.off('click', mapClickHandlerRef.current);
+            mapClickHandlerRef.current = null;
+            map.getCanvas().style.cursor = '';
+        }
+        const currentVerts = [...verticesRef.current];
+        if (activeRingIdRef.current !== null) {
+            // Update the existing ring's vertices in-place, re-add its static overlay
+            const editedId = activeRingIdRef.current;
+            setCompletedPolygons(prev => prev.map(p =>
+                p.id === editedId ? { ...p, vertices: currentVerts } : p
+            ));
+            addCompletedRingToMap(editedId, currentVerts);
+            setActiveRingId(null);
+        } else {
+            // Save the new ring and advance the num counter
+            const ringId = nextRingIdRef.current++;
+            addCompletedRingToMap(ringId, currentVerts);
+            setCompletedPolygons(prev => [...prev, { id: ringId, num: activeRingNumRef.current, vertices: currentVerts }]);
+            setActiveRingNum(nextNewNumRef.current++);
+        }
+        // Clear active drawing state
+        markersRef.current.forEach(m => m.remove());
+        markersRef.current = [];
+        curveMarkersRef.current.forEach(m => m.remove());
+        curveMarkersRef.current = [];
+        setCurveControlPoints({});
+        curveControlPointsRef.current = {};
+        curveVertexCountRef.current = 0;
+        circleMetaRef.current = null;
+        setVertices([]);
+        updatePolygonOnMap([]);
+        setHistory([]);
+        setFuture([]);
+        // Re-attach click handler for the new polygon
+        const handleMapClick = (e) => {
+            const { lat, lng } = e.lngLat;
+            const newVertex = { lat: parseFloat(lat.toFixed(6)), lng: parseFloat(lng.toFixed(6)) };
+            saveToHistoryRef.current?.();
+            setVertices(prev => {
+                const updated = [...prev, newVertex];
+                syncCurveGeometry(updated, { rebuildHandles: true });
+                updatePolygonOnMap(updated);
+                rebuildMarkers(updated);
+                return updated;
+            });
+        };
+        mapClickHandlerRef.current = handleMapClick;
+        if (map) {
+            map.on('click', handleMapClick);
+            map.getCanvas().style.cursor = 'crosshair';
+        }
+        setIsDrawing(true);
+    }, [isImageMode, addCompletedRingToMap, updatePolygonOnMap, syncCurveGeometry, rebuildMarkers]);
+
+    // Delete a completed ring by id
+    const handleDeleteCompletedRing = useCallback((ringId) => {
+        removeCompletedRingFromMap(ringId);
+        setCompletedPolygons(prev => prev.filter(p => p.id !== ringId));
+        // If deleting the ring currently being edited, clear it from canvas too
+        if (activeRingIdRef.current === ringId) {
+            setActiveRingId(null);
+            markersRef.current.forEach(m => m.remove());
+            markersRef.current = [];
+            curveMarkersRef.current.forEach(m => m.remove());
+            curveMarkersRef.current = [];
+            setCurveControlPoints({});
+            curveControlPointsRef.current = {};
+            curveVertexCountRef.current = 0;
+            circleMetaRef.current = null;
+            setVertices([]);
+            updatePolygonOnMap([]);
+            const map = window.atlasMapInstance;
+            if (map && mapClickHandlerRef.current) {
+                map.off('click', mapClickHandlerRef.current);
+                mapClickHandlerRef.current = null;
+                map.getCanvas().style.cursor = '';
+            }
+            setIsDrawing(false);
+        }
+    }, [removeCompletedRingFromMap, updatePolygonOnMap]);
 
     // Toggle label visibility on markers when drawing state changes
     const updateMarkerLabels = useCallback((show) => {
@@ -1382,6 +1592,13 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
         if (isDragMode) { stopDragMode(); setIsDragMode(false); }
         if (isRotateMode) { stopRotateMode(); setIsRotateMode(false); }
         if (isResizeMode) { stopResizeMode(); setIsResizeMode(false); }
+        // Clear completed rings
+        completedPolygonsRef.current.forEach(ring => removeCompletedRingFromMap(ring.id));
+        setCompletedPolygons([]);
+        setActiveRingId(null);
+        nextRingIdRef.current = 1;
+        nextNewNumRef.current = 2;
+        setActiveRingNum(1);
         setVertices([]);
         markersRef.current.forEach(m => m.remove());
         markersRef.current = [];
@@ -1422,7 +1639,97 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
             map.on('click', handleMapClick);
             map.getCanvas().style.cursor = 'crosshair';
         }
-    }, [updatePolygonOnMap, isDragMode, stopDragMode, isRotateMode, stopRotateMode, isResizeMode, stopResizeMode, syncCurveGeometry, rebuildMarkers, isImageMode, startShapePlacement]);
+    }, [updatePolygonOnMap, isDragMode, stopDragMode, isRotateMode, stopRotateMode, isResizeMode, stopResizeMode, syncCurveGeometry, rebuildMarkers, isImageMode, startShapePlacement, removeCompletedRingFromMap]);
+
+    // Activate a completed ring for in-place editing (ring stays in list, just becomes editable)
+    const handleActivateRing = useCallback((ringId) => {
+        if (isImageMode) return;
+        if (activeRingIdRef.current === ringId) return; // already editing this one
+        saveToHistoryRef.current?.();
+        // Exit special modes first
+        if (isDragMode) { stopDragMode(); setIsDragMode(false); }
+        if (isRotateMode) { stopRotateMode(); setIsRotateMode(false); }
+        if (isResizeMode) { stopResizeMode(); setIsResizeMode(false); }
+        const map = window.atlasMapInstance;
+        const currentVerts = verticesRef.current;
+        const prevActiveRingId = activeRingIdRef.current;
+
+        // Save current canvas state before switching
+        if (prevActiveRingId !== null) {
+            // Was editing an existing ring — save its vertices back & restore its map overlay
+            setCompletedPolygons(prev => prev.map(p =>
+                p.id === prevActiveRingId ? { ...p, vertices: [...currentVerts] } : p
+            ));
+            addCompletedRingToMap(prevActiveRingId, currentVerts);
+        } else if (currentVerts.length >= 3) {
+            // Was drawing a brand-new ring — auto-save it as a completed ring
+            const newRingId = nextRingIdRef.current++;
+            addCompletedRingToMap(newRingId, currentVerts);
+            setCompletedPolygons(prev => [...prev, { id: newRingId, num: activeRingNumRef.current, vertices: [...currentVerts] }]);
+            setActiveRingNum(nextNewNumRef.current++);
+        }
+
+        // Find the target ring
+        const targetRing = completedPolygonsRef.current.find(p => p.id === ringId);
+        if (!targetRing) return;
+
+        // Remove target ring's static overlay (it will be shown live by the drawing tool)
+        removeCompletedRingFromMap(ringId);
+
+        // Detach old click handler
+        if (map && mapClickHandlerRef.current) {
+            map.off('click', mapClickHandlerRef.current);
+            mapClickHandlerRef.current = null;
+        }
+        // Clear current drawing markers
+        markersRef.current.forEach(m => m.remove());
+        markersRef.current = [];
+        curveMarkersRef.current.forEach(m => m.remove());
+        curveMarkersRef.current = [];
+        circleMetaRef.current = null;
+        // Load target ring's vertices into the drawing canvas
+        const targetVerts = targetRing.vertices;
+        setCurveControlPoints({});
+        curveControlPointsRef.current = {};
+        curveVertexCountRef.current = targetVerts.length;
+        syncCurveGeometry(targetVerts, { forceReset: true });
+        setVertices(targetVerts);
+        updatePolygonOnMap(targetVerts);
+        rebuildMarkers(targetVerts);
+        setHistory([]);
+        setFuture([]);
+        // Mark this ring as the one being edited
+        setActiveRingId(ringId);
+        // Attach click handler so user can add more vertices
+        const handleMapClick = (e) => {
+            const { lat, lng } = e.lngLat;
+            const newVertex = { lat: parseFloat(lat.toFixed(6)), lng: parseFloat(lng.toFixed(6)) };
+            saveToHistoryRef.current?.();
+            setVertices(prev => {
+                const updated = [...prev, newVertex];
+                syncCurveGeometry(updated, { rebuildHandles: true });
+                updatePolygonOnMap(updated);
+                rebuildMarkers(updated);
+                return updated;
+            });
+        };
+        mapClickHandlerRef.current = handleMapClick;
+        if (map) {
+            map.on('click', handleMapClick);
+            map.getCanvas().style.cursor = 'crosshair';
+        }
+        setIsDrawing(true);
+        // Fly to the polygon's bounds
+        if (map && targetVerts.length >= 2) {
+            const lats = targetVerts.map(v => v.lat);
+            const lngs = targetVerts.map(v => v.lng);
+            map.fitBounds(
+                [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
+                { padding: 80, maxZoom: 16 }
+            );
+        }
+    }, [isImageMode, isDragMode, stopDragMode, isRotateMode, stopRotateMode, isResizeMode, stopResizeMode,
+        addCompletedRingToMap, removeCompletedRingFromMap, updatePolygonOnMap, syncCurveGeometry, rebuildMarkers]);
 
 
     // Position modal flush with the draw control bar
@@ -1490,12 +1797,19 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
         }
 
         // Render initial vertices if provided (edit mode)
-        if (initialVertices && initialVertices.length >= minimumVertexCount) {
-            syncCurveGeometry(initialVertices, { forceReset: true });
-            updatePolygonOnMap(initialVertices);
-            rebuildMarkers(initialVertices);
+        // For multi-ring cards, initialVertices has vertices with a `ring` property.
+        // parseActiveRing() extracts the last ring; completed rings are rendered as static overlays.
+        const activeVerts = parseActiveRing(initialVertices, isImageMode);
+        if (activeVerts && activeVerts.length >= minimumVertexCount) {
+            syncCurveGeometry(activeVerts, { forceReset: true });
+            updatePolygonOnMap(activeVerts);
+            rebuildMarkers(activeVerts);
             updateMarkerLabels(false); // editing mode: hide labels initially
         }
+        // Render static overlays for all completed rings (rings other than the active one)
+        parseCompletedRings(initialVertices, isImageMode).forEach(ring => {
+            addCompletedRingToMap(ring.id, ring.vertices);
+        });
 
         // Click handler for adding vertices
         const handleMapClick = (e) => {
@@ -1570,6 +1884,13 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
         map.on('mousedown', POLYGON_LINE_LAYER, onCurveLineMouseDown);
 
         return () => {
+            // Remove completed ring overlays
+            completedRingLayersRef.current.forEach(({ srcId, lineLayId, fillLayId }) => {
+                if (map.getLayer(fillLayId)) map.removeLayer(fillLayId);
+                if (map.getLayer(lineLayId)) map.removeLayer(lineLayId);
+                if (map.getSource(srcId)) map.removeSource(srcId);
+            });
+            completedRingLayersRef.current = [];
             // Clean up
             if (mapClickHandlerRef.current) {
                 map.off('click', mapClickHandlerRef.current);
@@ -1601,7 +1922,7 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
             fillSourceAdded.current = false;
             imageSourceAdded.current = false;
         };
-    }, [initialVertices, updateMarkerLabels, updatePolygonOnMap, rebuildMarkers, syncCurveGeometry, isImageMode, minimumVertexCount, fillColor, fillOpacity, lineStyle]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [initialVertices, updateMarkerLabels, updatePolygonOnMap, rebuildMarkers, syncCurveGeometry, isImageMode, minimumVertexCount, fillColor, fillOpacity, lineStyle, addCompletedRingToMap]); // eslint-disable-line react-hooks/exhaustive-deps
     // Note: fillColor, fillOpacity, lineStyle are intentionally excluded — they are handled by
     // their own dedicated useEffects above via setPaintProperty, so they must NOT trigger a
     // full teardown/reinit of the layer setup (which would make markers invisible).
@@ -1875,6 +2196,36 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
         }
         setIsDrawing(false);
         updateMarkerLabels(false);
+        // Move the active polygon into completedPolygons so it shows as a finished ring
+        const currentVerts = verticesRef.current;
+        if (currentVerts.length >= 3) {
+            if (activeRingIdRef.current !== null) {
+                // Editing an existing ring — save vertices back in-place, restore its overlay
+                const editedId = activeRingIdRef.current;
+                setCompletedPolygons(prev => prev.map(p =>
+                    p.id === editedId ? { ...p, vertices: [...currentVerts] } : p
+                ));
+                addCompletedRingToMap(editedId, currentVerts);
+                setActiveRingId(null);
+            } else {
+                // New ring — add to list; do NOT advance nextNewNumRef here
+                // (the counter only advances when the user starts drawing the NEXT new ring)
+                const ringId = nextRingIdRef.current++;
+                addCompletedRingToMap(ringId, currentVerts);
+                setCompletedPolygons(prev => [...prev, { id: ringId, num: activeRingNumRef.current, vertices: [...currentVerts] }]);
+            }
+            // Clear active drawing state
+            markersRef.current.forEach(m => m.remove());
+            markersRef.current = [];
+            curveMarkersRef.current.forEach(m => m.remove());
+            curveMarkersRef.current = [];
+            setCurveControlPoints({});
+            curveControlPointsRef.current = {};
+            curveVertexCountRef.current = 0;
+            circleMetaRef.current = null;
+            setVertices([]);
+            updatePolygonOnMap([]);
+        }
     };
 
     // Resume drawing
@@ -1889,6 +2240,10 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
         if (isResizeMode) { stopResizeMode(); setIsResizeMode(false); }
         const map = window.atlasMapInstance;
         if (!map) return;setShowShapeMenu(false); 
+        // Advance activeRingNum for the new ring being started (only when not editing existing)
+        if (activeRingIdRef.current === null) {
+            setActiveRingNum(nextNewNumRef.current++);
+        }
 
         const handleMapClick = (e) => {
             const { lat, lng } = e.lngLat;
@@ -1941,16 +2296,27 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
             onSave(firstVerts, centroid, { lineStyle, fillColor, fillOpacity, imageOpacity }, placedSlots);
             return;
         }
-        if (vertices.length < minimumVertexCount) {
+        // Collect all rings: completed rings (using live vertices for the actively-edited ring) + any unsaved new ring
+        const allRings = [
+            ...completedPolygonsRef.current.map(p => {
+                // For the ring currently being edited, use the live canvas vertices
+                if (p.id === activeRingIdRef.current) return verticesRef.current;
+                return p.vertices;
+            }).filter(verts => verts.length >= minimumVertexCount),
+            // Include unsaved new ring (only when NOT editing an existing one)
+            ...(activeRingIdRef.current === null && vertices.length >= minimumVertexCount ? [vertices] : []),
+        ];
+        if (allRings.length === 0) {
             alert('A polygon needs at least 3 points.');
             return;
         }
-        // Compute centroid for lat/lng fields
-        const centroid = vertices.reduce(
-            (acc, v) => ({ lat: acc.lat + v.lat / vertices.length, lng: acc.lng + v.lng / vertices.length }),
+        // Compute centroid from all vertices across all rings
+        const allVerts = allRings.flat();
+        const centroid = allVerts.reduce(
+            (acc, v) => ({ lat: acc.lat + v.lat / allVerts.length, lng: acc.lng + v.lng / allVerts.length }),
             { lat: 0, lng: 0 }
         );
-        onSave(vertices, centroid, { lineStyle, fillColor, fillOpacity });
+        onSave(allRings, centroid, { lineStyle, fillColor, fillOpacity });
     };
 
     const handleCancel = () => {
@@ -2224,7 +2590,7 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
                         type="button"
                         className="polygon-draw-style-btn polygon-draw-clear-btn"
                         title="Clear All"
-                        disabled={isImageMode ? vertices.length === 0 : vertices.length === 0}
+                        disabled={isImageMode ? vertices.length === 0 : (vertices.length === 0 && completedPolygons.length === 0)}
                         onClick={handleClearAll}
                     >
                         <FontAwesomeIcon icon={faTrash} style={{ fontSize: 13, width: 15, height: 15 }} />
@@ -2287,8 +2653,56 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
                 </div>
             ) : (
             <div className="polygon-draw-modal-vertices">
-                {vertices.length === 0 && (
+                {completedPolygons.length === 0 && vertices.length === 0 && (
                     <div className="polygon-draw-modal-empty">No points yet</div>
+                )}
+                {/* Completed polygon ring groups */}
+                {completedPolygons.map((ring) => {
+                    const isEditing = ring.id === activeRingId;
+                    const displayVerts = isEditing ? vertices : ring.vertices;
+                    return (
+                    <div
+                        key={ring.id}
+                        className={`polygon-ring-group${isEditing ? ' polygon-ring-group--editing' : ' polygon-ring-group--selectable'}`}
+                        role={isEditing ? undefined : 'button'}
+                        tabIndex={isEditing ? undefined : 0}
+                        title={isEditing ? undefined : 'Click to edit this polygon'}
+                        onClick={isEditing ? undefined : () => handleActivateRing(ring.id)}
+                        onKeyDown={isEditing ? undefined : (e => { if (e.key === 'Enter' || e.key === ' ') handleActivateRing(ring.id); })}
+                    >
+                        <div className="polygon-ring-group-header">
+                            <span className="polygon-ring-group-title">
+                                Polygon {ring.num}
+                                <span className="polygon-ring-group-count"> · {displayVerts.length} pts</span>
+                                {isEditing && <span className="polygon-ring-group-editing-badge"> ✏</span>}
+                            </span>
+                            <button
+                                type="button"
+                                className="polygon-ring-group-delete"
+                                onClick={e => { e.stopPropagation(); handleDeleteCompletedRing(ring.id); }}
+                                title="Delete this polygon"
+                            >&times;</button>
+                        </div>
+                        {displayVerts.map((v, i) => (
+                            <div key={i} className={`polygon-draw-modal-vertex-row${isEditing ? '' : ' polygon-ring-vertex-row--completed'}`}>
+                                <span className="polygon-draw-modal-vertex-num">{i + 1}</span>
+                                <div className="polygon-draw-modal-vertex-coords">
+                                    <span>{v.lat.toFixed(6)}</span>
+                                    <span className="polygon-draw-vertex-comma">,</span>
+                                    <span>{v.lng.toFixed(6)}</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    );
+                })}
+                {/* Active new ring header (only shown when drawing a brand-new ring) */}
+                {activeRingId === null && completedPolygons.length > 0 && (isDrawing || vertices.length > 0) && (
+                    <div className="polygon-ring-group-header polygon-ring-group-header--active">
+                        <span className="polygon-ring-group-title">
+                            Polygon {activeRingNum}
+                        </span>
+                    </div>
                 )}
                 {circleMetaRef.current ? (
                     (() => {
@@ -2408,6 +2822,16 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
                         Finish Drawing
                     </button>
                 )}
+                {!isImageMode && isDrawing && vertices.length >= 3 && (
+                    <button
+                        type="button"
+                        className="polygon-draw-modal-btn polygon-draw-modal-btn-new-polygon"
+                        onClick={handleNewPolygon}
+                        title="Finish this polygon and start drawing a new separate one"
+                    >
+                        + New Polygon
+                    </button>
+                )}
                 {!isImageMode && !isDrawing && (
                     <button
                         type="button"
@@ -2423,7 +2847,7 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
                     onClick={handleSave}
                     disabled={isImageMode
                         ? imgSlots.filter(s => (s.id === activeImgId ? vertices : s.vertices).length >= 4).length === 0
-                        : vertices.length < minimumVertexCount}
+                        : (vertices.length < minimumVertexCount && completedPolygons.length === 0)}
                 >
                     Save
                 </button>

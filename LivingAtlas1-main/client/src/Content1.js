@@ -849,10 +849,6 @@ const Content1 = (props) => {
           e.preventDefault();
           e.stopPropagation();
           closeAddToolsMenu();
-          if (!isLoggedInRef.current) {
-            window.dispatchEvent(new CustomEvent('atlas:login-required'));
-            return;
-          }
           setIsPolygonToolDrawing(true);
         });
 
@@ -860,10 +856,6 @@ const Content1 = (props) => {
           e.preventDefault();
           e.stopPropagation();
           closeAddToolsMenu();
-          if (!isLoggedInRef.current) {
-            window.dispatchEvent(new CustomEvent('atlas:login-required'));
-            return;
-          }
           window.dispatchEvent(new CustomEvent('map-image-tool-start'));
         });
 
@@ -1160,8 +1152,16 @@ const Content1 = (props) => {
         if (!vertices || !Array.isArray(vertices)) continue;
 
         if (feature.location_type === 'polygon' && vertices.length >= 3) {
-          const coords = vertices.map(v => [parseFloat(v.lng), parseFloat(v.lat)]);
-          coords.push(coords[0]);
+          // Group vertices by ring index (support multi-polygon / MultiPolygon)
+          const ringMap = new Map();
+          for (const v of vertices) {
+            const r = v.ring ?? 0;
+            if (!ringMap.has(r)) ringMap.set(r, []);
+            ringMap.get(r).push([parseFloat(v.lng), parseFloat(v.lat)]);
+          }
+          const ringCoords = [...ringMap.entries()]
+            .sort(([a], [b]) => a - b)
+            .map(([, pts]) => { const c = [...pts, pts[0]]; return c; });
 
           const sourceId = `card-polygon-${feature.cardID}`;
           const fillLayerId = `card-polygon-fill-${feature.cardID}`;
@@ -1169,11 +1169,16 @@ const Content1 = (props) => {
           const fillColor = feature.polygon_fill_color || '#0077c0';
           const lineDash = LINE_STYLE_DASH[feature.polygon_line_style] || [];
 
+          // Use MultiPolygon if more than one ring, otherwise Polygon
+          const geometry = ringCoords.length > 1
+            ? { type: 'MultiPolygon', coordinates: ringCoords.map(c => [c]) }
+            : { type: 'Polygon', coordinates: ringCoords };
+
           mapInstance.addSource(sourceId, {
             type: 'geojson',
             data: {
               type: 'Feature',
-              geometry: { type: 'Polygon', coordinates: [coords] }
+              geometry
             }
           });
 
@@ -1561,10 +1566,12 @@ const Content1 = (props) => {
       {isPolygonToolDrawing && (
         <PolygonDrawingModal
           mode="polygon"
-          onSave={(vertices, centroid, style) => {
+          onSave={(allRings, centroid, style) => {
             setIsPolygonToolDrawing(false);
+            // Flatten array-of-rings into a flat array with `ring` index property
+            const flatVerts = allRings.flatMap((ring, ringIdx) => ring.map(v => ({ ...v, ring: ringIdx })));
             window.dispatchEvent(new CustomEvent('polygon-tool-save', {
-              detail: { vertices, centroid, fillColor: style?.fillColor, lineStyle: style?.lineStyle }
+              detail: { vertices: flatVerts, centroid, fillColor: style?.fillColor, lineStyle: style?.lineStyle }
             }));
           }}
           onCancel={() => setIsPolygonToolDrawing(false)}

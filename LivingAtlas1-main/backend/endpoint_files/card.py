@@ -389,9 +389,10 @@ def allCards(viewer_email: Optional[str] = None):
                         SELECT json_agg(
                             jsonb_build_object(
                                 'lat', pv.Latitude,
-                                'lng', pv.Longitude
+                                'lng', pv.Longitude,
+                                'ring', COALESCE(pv.RingIndex, 0)
                             )
-                            ORDER BY pv.VertexOrder ASC
+                            ORDER BY COALESCE(pv.RingIndex, 0) ASC, pv.VertexOrder ASC
                         )
                         FROM CardPolygonVertices pv
                         WHERE pv.CardID = c.CardID
@@ -651,18 +652,28 @@ async def upload_form(
             try:
                 parsed = json.loads(polygon_coordinates)
                 # Support new envelope format: { vertices: [...], fillColor, lineStyle }
-                if isinstance(parsed, dict) and "vertices" in parsed:
-                    vertices = parsed["vertices"]
-                    # Extract style from JSON envelope when Form params are missing/default
+                # Extract style from JSON envelope when Form params are missing/default
+                if isinstance(parsed, dict):
                     if not polygon_fill_color and parsed.get("fillColor"):
                         polygon_fill_color = parsed["fillColor"]
                     if not polygon_line_style and parsed.get("lineStyle"):
                         polygon_line_style = parsed["lineStyle"]
+
+                # Determine rings: new multi-ring format {rings: [[{lat,lng},...], ...]} or
+                # legacy single-ring format {vertices: [{lat,lng},...]} or plain array
+                if isinstance(parsed, dict) and "rings" in parsed:
+                    rings = parsed["rings"]  # list of rings (each ring = list of vertices)
+                elif isinstance(parsed, dict) and "vertices" in parsed:
+                    rings = [parsed["vertices"]]  # single ring
+                elif isinstance(parsed, list):
+                    rings = [parsed]  # legacy plain array
                 else:
-                    vertices = parsed  # legacy: plain array of vertices
+                    rings = []
 
                 minimum_vertices = 4 if location_type == "image" else 3
-                if not isinstance(vertices, list) or len(vertices) < minimum_vertices:
+                # For polygon: require at least one ring with enough vertices
+                all_vertices_flat = [v for ring in rings for v in ring]
+                if not rings or len(all_vertices_flat) < minimum_vertices:
                     raise HTTPException(
                         status_code=400,
                         detail="Image overlay must have 4 vertices" if location_type == "image" else "Polygon must have at least 3 vertices"
@@ -673,16 +684,19 @@ async def upload_form(
                     UPDATE Cards SET PolygonFillColor=%s, PolygonLineStyle=%s WHERE CardID=%s
                 """, (polygon_fill_color or '#0077c0', polygon_line_style or 'solid', nextcardid))
 
-                for i, vertex in enumerate(vertices):
-                    v_lat = float(vertex["lat"])
-                    v_lng = float(vertex["lng"])
-                    if not (-90 <= v_lat <= 90) or not (-180 <= v_lng <= 180):
-                        raise HTTPException(status_code=400, detail=f"Vertex {i} has invalid coordinates")
-                    cur.execute(
-                        "INSERT INTO CardPolygonVertices (CardID, VertexOrder, Latitude, Longitude) VALUES (%s, %s, %s, %s)",
-                        (nextcardid, i, v_lat, v_lng)
-                    )
-                print(f"[DB] Polygon vertices inserted: {len(vertices)} points, fillColor={polygon_fill_color}, lineStyle={polygon_line_style}")
+                total_inserted = 0
+                for ring_idx, ring in enumerate(rings):
+                    for vertex_order, vertex in enumerate(ring):
+                        v_lat = float(vertex["lat"])
+                        v_lng = float(vertex["lng"])
+                        if not (-90 <= v_lat <= 90) or not (-180 <= v_lng <= 180):
+                            raise HTTPException(status_code=400, detail=f"Vertex {vertex_order} in ring {ring_idx} has invalid coordinates")
+                        cur.execute(
+                            "INSERT INTO CardPolygonVertices (CardID, RingIndex, VertexOrder, Latitude, Longitude) VALUES (%s, %s, %s, %s, %s)",
+                            (nextcardid, ring_idx, vertex_order, v_lat, v_lng)
+                        )
+                        total_inserted += 1
+                print(f"[DB] Polygon vertices inserted: {total_inserted} points in {len(rings)} ring(s), fillColor={polygon_fill_color}, lineStyle={polygon_line_style}")
             except json.JSONDecodeError:
                 raise HTTPException(status_code=400, detail="Invalid polygon_coordinates JSON format")
 

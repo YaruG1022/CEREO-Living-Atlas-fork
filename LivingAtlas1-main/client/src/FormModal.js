@@ -244,13 +244,29 @@ const FormModal = (props) => {
         // Add location type and polygon data
         formData2.append('location_type', locationType);
         if ((locationType === 'polygon' && polygonVertices.length >= 3) || (locationType === 'image' && polygonVertices.length >= 4)) {
-            // Embed style inside JSON so it always travels with vertices
-            formData2.append('polygon_coordinates', JSON.stringify({
-                vertices: polygonVertices,
-                fillColor: polygonFillColor,
-                lineStyle: polygonLineStyle,
-                ...(locationType === 'image' ? { imageOpacity: overlayImageOpacity } : {})
-            }));
+            if (locationType === 'image') {
+                // Image overlays use flat vertices (4 corners, no ring concept)
+                formData2.append('polygon_coordinates', JSON.stringify({
+                    vertices: polygonVertices,
+                    fillColor: polygonFillColor,
+                    lineStyle: polygonLineStyle,
+                    imageOpacity: overlayImageOpacity
+                }));
+            } else {
+                // Polygon cards: build rings from flat array with ring property
+                const ringMap = new Map();
+                for (const v of polygonVertices) {
+                    const r = v.ring ?? 0;
+                    if (!ringMap.has(r)) ringMap.set(r, []);
+                    ringMap.get(r).push({ lat: v.lat, lng: v.lng });
+                }
+                const rings = [...ringMap.entries()].sort(([a], [b]) => a - b).map(([, verts]) => verts);
+                formData2.append('polygon_coordinates', JSON.stringify({
+                    rings,
+                    fillColor: polygonFillColor,
+                    lineStyle: polygonLineStyle,
+                }));
+            }
             formData2.append('polygon_fill_color', polygonFillColor);
             formData2.append('polygon_line_style', polygonLineStyle);
         }
@@ -428,8 +444,10 @@ const FormModal = (props) => {
         window.dispatchEvent(new CustomEvent('map-image-tool-start'));
     };
 
-    const handlePolygonSave = (vertices, centroid, style) => {
-        setPolygonVertices(vertices);
+    const handlePolygonSave = (allRings, centroid, style) => {
+        // Flatten array-of-rings into a flat array with `ring` index property
+        const flatVerts = allRings.flatMap((ring, ringIdx) => ring.map(v => ({ ...v, ring: ringIdx })));
+        setPolygonVertices(flatVerts);
         if (style) {
             if (style.fillColor) setPolygonFillColor(style.fillColor);
             if (style.lineStyle) setPolygonLineStyle(style.lineStyle);

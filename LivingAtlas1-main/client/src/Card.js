@@ -649,11 +649,29 @@ function Card(props) {
 
     // Send polygon vertices as JSON string if polygon card
     if (isOverlayCard && Array.isArray(formData.polygon_vertices) && formData.polygon_vertices.length >= (isImageCard ? 4 : 3)) {
-        formDataToSend.append('polygon_coordinates', JSON.stringify({
-            vertices: formData.polygon_vertices,
-            fillColor: formData.polygon_fill_color,
-            lineStyle: formData.polygon_line_style
-        }));
+        const pv = formData.polygon_vertices;
+        if (isImageCard) {
+            // Image overlays use flat 4-corner vertices (no ring concept)
+            formDataToSend.append('polygon_coordinates', JSON.stringify({
+                vertices: pv,
+                fillColor: formData.polygon_fill_color,
+                lineStyle: formData.polygon_line_style
+            }));
+        } else {
+            // Polygon cards: build rings from flat array with ring property
+            const ringMap = new Map();
+            for (const v of pv) {
+                const r = v.ring ?? 0;
+                if (!ringMap.has(r)) ringMap.set(r, []);
+                ringMap.get(r).push({ lat: v.lat, lng: v.lng });
+            }
+            const rings = [...ringMap.entries()].sort(([a], [b]) => a - b).map(([, verts]) => verts);
+            formDataToSend.append('polygon_coordinates', JSON.stringify({
+                rings,
+                fillColor: formData.polygon_fill_color,
+                lineStyle: formData.polygon_line_style
+            }));
+        }
     }
 
     //Only true if editing an existing card
@@ -895,10 +913,12 @@ function Card(props) {
     }, [formData.cardID, formData.location_type, props.cardID]);
 
     // After polygon edit save: update formData and return to learn-more modal (edit mode)
-    const handlePolygonEditSave = useCallback((vertices, centroid, style) => {
+    const handlePolygonEditSave = useCallback((allRings, centroid, style) => {
+        // Flatten array-of-rings into a flat array with `ring` index property
+        const flatVerts = allRings.flatMap((ring, ringIdx) => ring.map(v => ({ ...v, ring: ringIdx })));
         setFormData(prev => ({
             ...prev,
-            polygon_vertices: vertices,
+            polygon_vertices: flatVerts,
             latitude: centroid.lat.toFixed(6),
             longitude: centroid.lng.toFixed(6),
             polygon_fill_color: style?.fillColor || prev.polygon_fill_color,
@@ -916,13 +936,13 @@ function Card(props) {
         // Update the polygon on the main map immediately
         const map = window.atlasMapInstance;
         const cardID = formData.cardID || props.cardID;
-        if (map && cardID && vertices.length >= (formData.location_type === 'image' ? 4 : 3)) {
+        if (map && cardID && flatVerts.length >= (formData.location_type === 'image' ? 4 : 3)) {
             const fillColor = style?.fillColor || formData.polygon_fill_color || '#0077c0';
             if (formData.location_type === 'image') {
                 const imageSourceId = `card-image-${cardID}`;
                 const outlineSourceId = `card-image-outline-source-${cardID}`;
                 const outlineLayerId = `card-image-outline-${cardID}`;
-                const imageCoords = vertices.slice(0, 4).map(v => [parseFloat(v.lng), parseFloat(v.lat)]);
+                const imageCoords = flatVerts.slice(0, 4).map(v => [parseFloat(v.lng), parseFloat(v.lat)]);
                 const outlineCoords = [...imageCoords, imageCoords[0]];
                 const imageSource = map.getSource(imageSourceId);
                 const outlineSource = map.getSource(outlineSourceId);
@@ -947,14 +967,22 @@ function Card(props) {
                 const sourceId = `card-polygon-${cardID}`;
                 const fillLayerId = `card-polygon-fill-${cardID}`;
                 const lineLayerId = `card-polygon-line-${cardID}`;
-                const coords = vertices.map(v => [parseFloat(v.lng), parseFloat(v.lat)]);
-                coords.push(coords[0]);
+                // Group flat vertices by ring and build MultiPolygon coordinates
+                const ringMap = new Map();
+                for (const v of flatVerts) {
+                    const r = v.ring ?? 0;
+                    if (!ringMap.has(r)) ringMap.set(r, []);
+                    ringMap.get(r).push([parseFloat(v.lng), parseFloat(v.lat)]);
+                }
+                const ringCoords = [...ringMap.entries()]
+                    .sort(([a], [b]) => a - b)
+                    .map(([, pts]) => { const c = [...pts]; c.push(c[0]); return c; });
 
                 const source = map.getSource(sourceId);
                 if (source) {
                     source.setData({
                         type: 'Feature',
-                        geometry: { type: 'Polygon', coordinates: [coords] }
+                        geometry: { type: 'MultiPolygon', coordinates: ringCoords.map(c => [c]) }
                     });
                 }
 

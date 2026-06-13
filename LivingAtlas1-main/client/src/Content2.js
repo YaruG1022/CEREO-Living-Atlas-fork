@@ -49,41 +49,29 @@ function Content2(props) {
     // Listen for polygon-tool-save from Content1's Polygon Tool
     useEffect(() => {
         const handler = (e) => {
-            if (!props.isLoggedIn) {
-                setShowLoginPrompt(true);
-                return;
-            }
             setPendingPolygonData(e.detail);
             setIsModalOpen(true);
         };
         window.addEventListener('polygon-tool-save', handler);
         return () => window.removeEventListener('polygon-tool-save', handler);
-    }, [props.isLoggedIn]);
+    }, []);
 
     useEffect(() => {
         const handler = (e) => {
-            if (!props.isLoggedIn) {
-                setShowLoginPrompt(true);
-                return;
-            }
             setPendingImageOverlayData(e.detail);
             setIsModalOpen(true);
         };
         window.addEventListener('map-image-tool-save', handler);
         return () => window.removeEventListener('map-image-tool-save', handler);
-    }, [props.isLoggedIn]);
+    }, []);
 
     useEffect(() => {
         const handler = () => {
-            if (!props.isLoggedIn) {
-                setShowLoginPrompt(true);
-                return;
-            }
             setPendingPointToolSignal(Date.now());
         };
         window.addEventListener('map-point-tool-start', handler);
         return () => window.removeEventListener('map-point-tool-start', handler);
-    }, [props.isLoggedIn]);
+    }, []);
 
     useEffect(() => {
         const handler = () => {

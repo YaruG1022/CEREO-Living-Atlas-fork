@@ -117,7 +117,12 @@ def _ensure_schema():
             ALTER TABLE Cards ADD COLUMN IF NOT EXISTS PolygonLineStyle VARCHAR(20) DEFAULT 'solid';
         """)
 
-        # Migration 006 — user-specific UI preferences (extensible JSONB payload)
+        # Migration 006 — is_public flag for cards (public vs uploader-only visibility)
+        cur.execute("""
+            ALTER TABLE Cards ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT TRUE;
+        """)
+
+        # Migration 006b — user-specific UI preferences (extensible JSONB payload)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS user_preferences (
                 user_email VARCHAR(255) PRIMARY KEY,
