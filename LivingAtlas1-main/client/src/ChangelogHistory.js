@@ -26,6 +26,15 @@ function ChangelogHistory() {
             <div className="changelog-history-body">
                 {activeTab === 'latest' && (
                     <>
+                        <h3>Update Date: 6/12/2026</h3>
+                        <p>Added card visibility settings (public or uploader-only) in both the Add Card modal and the Learn More modal.</p>
+                        <p>Added a user feedback input box on the Contact page.</p>
+                        <p>Added support for multiple polygons to represent a single card.</p>
+                        <p>Configured Resend API and custom domain for wsu.cereoaltas25@gmail.com; updated corresponding Render environment variables.</p>
+                        <p>Fixed backend startup failure caused by database query errors.</p>
+                        <p>Fixed missing database column; added rollback for /allCards API failures.</p>
+                        <hr />
+
                         <h3>Update Date: 6/6/2026</h3>
                         <p>Made the RWC Living Atlas Helper chatbot floating widget freely draggable; snapping to the left or right screen edge collapses it.</p>
                         <p>Overhauled the Add Card from Map – Image workflow: clicking Image now opens the placement modal directly; the sidebar lists each uploaded image with individual remove buttons and an Add Image button to browse local files; a single card can be represented by multiple images.</p>

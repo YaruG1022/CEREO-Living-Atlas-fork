@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import Modal from 'react-modal';
 
 function ChangelogModal({ isOpen, onClose }) {
-    const [activeTab, setActiveTab] = useState('future');
+    const [activeTab, setActiveTab] = useState('latest');
 
     return (
         <Modal
@@ -18,22 +18,32 @@ function ChangelogModal({ isOpen, onClose }) {
             
             <div className="changelog-modal-tabs">
                 <button 
-                    className={`changelog-tab ${activeTab === 'future' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('future')}
-                >
-                    Future Works
-                </button>
-                <button 
                     className={`changelog-tab ${activeTab === 'latest' ? 'active' : ''}`}
                     onClick={() => setActiveTab('latest')}
                 >
                     Latest Update
+                </button>
+                <button 
+                    className={`changelog-tab ${activeTab === 'future' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('future')}
+                >
+                    Future Works
                 </button>
             </div>
 
             <div className="changelog-modal-body">
                 {activeTab === 'latest' && (
                     <>
+                        <h3>Update Date: 6/12/2026</h3>
+                        <ul className="changelog-list">
+                          <li>Added card visibility settings (public or uploader-only) in both the Add Card modal and the Learn More modal.</li>
+                          <li>Added a user feedback input box on the Contact page.</li>
+                          <li>Added support for multiple polygons to represent a single card.</li>
+                          <li>Configured Resend API and custom domain for wsu.cereoaltas25@gmail.com; updated corresponding Render environment variables.</li>
+                          <li>Fixed backend startup failure caused by database query errors.</li>
+                          <li>Fixed missing database column; added rollback for /allCards API failures.</li>
+                        </ul>
+
                         <h3>Update Date: 6/6/2026</h3>
                         <ul className="changelog-list">
                           <li>Made the RWC Living Atlas Helper chatbot floating widget freely draggable; snapping to the left or right screen edge collapses it.</li>
