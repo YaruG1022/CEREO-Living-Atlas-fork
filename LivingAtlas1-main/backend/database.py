@@ -161,6 +161,11 @@ def _ensure_schema():
             ALTER TABLE users ADD COLUMN IF NOT EXISTS last_online_at TIMESTAMP WITH TIME ZONE;
         """)
 
+        # Migration 011 — RingIndex column for multi-ring polygon support
+        cur.execute("""
+            ALTER TABLE CardPolygonVertices ADD COLUMN IF NOT EXISTS RingIndex INT DEFAULT 0;
+        """)
+
         conn.commit()
         print("[MIGRATIONS] Schema is up-to-date.")
     except Exception as e:

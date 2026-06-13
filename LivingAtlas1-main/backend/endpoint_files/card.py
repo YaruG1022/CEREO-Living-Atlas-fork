@@ -439,6 +439,12 @@ def allCards(viewer_email: Optional[str] = None):
     except HTTPException:
         raise
     except Exception as e:
+        try:
+            connection = get_connection()
+            if connection:
+                connection.rollback()
+        except Exception:
+            pass
         print(f"An error occurred while fetching all cards: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
     
