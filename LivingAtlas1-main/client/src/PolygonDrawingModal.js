@@ -1822,9 +1822,11 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
             updateMarkerLabels(false); // editing mode: hide labels initially
         }
         // Render static overlays for all completed rings (rings other than the active one)
-        completedPolygonsRef.current.forEach(ring => {
-            addCompletedRingToMap(ring.id, ring.vertices, ring);
-        });
+        completedPolygonsRef.current
+            .filter(ring => ring.id !== activeRingIdRef.current)  // skip the ring currently loaded in canvas
+            .forEach(ring => {
+                addCompletedRingToMap(ring.id, ring.vertices, ring);
+            });
 
         // Click handler for adding vertices
         const handleMapClick = (e) => {
@@ -1937,7 +1939,7 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
             fillSourceAdded.current = false;
             imageSourceAdded.current = false;
         };
-    }, [initialVertices, updateMarkerLabels, updatePolygonOnMap, rebuildMarkers, syncCurveGeometry, isImageMode, minimumVertexCount, fillColor, fillOpacity, lineStyle, addCompletedRingToMap]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [initialVertices, updateMarkerLabels, updatePolygonOnMap, rebuildMarkers, syncCurveGeometry, isImageMode, minimumVertexCount, addCompletedRingToMap]); // eslint-disable-line react-hooks/exhaustive-deps
     // Note: fillColor, fillOpacity, lineStyle are intentionally excluded — they are handled by
     // their own dedicated useEffects above via setPaintProperty, so they must NOT trigger a
     // full teardown/reinit of the layer setup (which would make markers invisible).
