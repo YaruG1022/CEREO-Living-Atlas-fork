@@ -44,6 +44,15 @@ bucket_name = "cereo_atlas_storage"
 bucket = storage_client.bucket(bucket_name)
 DEFAULT_THUMBNAIL_URL = "https://storage.googleapis.com/cereo_atlas_storage/thumbnails/default_cereo_thumbnail.png"
 
+
+def ensure_polygon_vertex_style_columns(cursor):
+    cursor.execute("""
+        ALTER TABLE CardPolygonVertices
+          ADD COLUMN IF NOT EXISTS FillColor VARCHAR(20),
+          ADD COLUMN IF NOT EXISTS FillOpacity DOUBLE PRECISION,
+          ADD COLUMN IF NOT EXISTS LineStyle VARCHAR(20)
+    """)
+
 # Function to delete files from Google Cloud
 def delete_from_bucket(blob_name):
     try:
@@ -336,6 +345,7 @@ def allCards(viewer_email: Optional[str] = None):
             raise HTTPException(status_code=503, detail="Database connection unavailable")
 
         with connection.cursor() as local_cur:
+            ensure_polygon_vertex_style_columns(local_cur)
             local_cur.execute("""
             SELECT
                 u.Username,
@@ -390,7 +400,10 @@ def allCards(viewer_email: Optional[str] = None):
                             jsonb_build_object(
                                 'lat', pv.Latitude,
                                 'lng', pv.Longitude,
-                                'ring', COALESCE(pv.RingIndex, 0)
+                                'ring', COALESCE(pv.RingIndex, 0),
+                                'fillColor', COALESCE(pv.FillColor, c.PolygonFillColor, '#0077c0'),
+                                'fillOpacity', COALESCE(pv.FillOpacity, 0.2),
+                                'lineStyle', COALESCE(pv.LineStyle, c.PolygonLineStyle, 'solid')
                             )
                             ORDER BY COALESCE(pv.RingIndex, 0) ASC, pv.VertexOrder ASC
                         )
@@ -469,6 +482,7 @@ async def upload_form(
     location_type: Optional[str] = Form("point"),
     polygon_coordinates: Optional[str] = Form(None),
     polygon_fill_color: Optional[str] = Form(None),
+    polygon_fill_opacity: Optional[str] = Form(None),
     polygon_line_style: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
     funding: Optional[str] = Form(None),
@@ -489,6 +503,7 @@ async def upload_form(
     print(f"[UPLOAD] username={username}, email={email}, orig_username={original_username or ''}, orig_email={original_email or ''}")
     print(f"[UPLOAD] location_type={location_type}, polygon_fill_color={polygon_fill_color!r}, polygon_line_style={polygon_line_style!r}")
     print(f"[UPLOAD] polygon_coordinates (first 200 chars): {str(polygon_coordinates)[:200] if polygon_coordinates else 'None'}")
+    ensure_polygon_vertex_style_columns(cur)
 
     try:
         # --------------------------------------------------
@@ -657,13 +672,18 @@ async def upload_form(
         if location_type in ("polygon", "image") and polygon_coordinates:
             try:
                 parsed = json.loads(polygon_coordinates)
+                ring_styles = []
                 # Support new envelope format: { vertices: [...], fillColor, lineStyle }
                 # Extract style from JSON envelope when Form params are missing/default
                 if isinstance(parsed, dict):
                     if not polygon_fill_color and parsed.get("fillColor"):
                         polygon_fill_color = parsed["fillColor"]
+                    if not polygon_fill_opacity and parsed.get("fillOpacity") is not None:
+                        polygon_fill_opacity = str(parsed["fillOpacity"])
                     if not polygon_line_style and parsed.get("lineStyle"):
                         polygon_line_style = parsed["lineStyle"]
+                    if isinstance(parsed.get("ringStyles"), list):
+                        ring_styles = parsed["ringStyles"]
 
                 # Determine rings: new multi-ring format {rings: [[{lat,lng},...], ...]} or
                 # legacy single-ring format {vertices: [{lat,lng},...]} or plain array
@@ -675,6 +695,11 @@ async def upload_form(
                     rings = [parsed]  # legacy plain array
                 else:
                     rings = []
+
+                if not polygon_fill_color and ring_styles and isinstance(ring_styles[0], dict):
+                    polygon_fill_color = ring_styles[0].get("fillColor") or polygon_fill_color
+                if not polygon_line_style and ring_styles and isinstance(ring_styles[0], dict):
+                    polygon_line_style = ring_styles[0].get("lineStyle") or polygon_line_style
 
                 minimum_vertices = 4 if location_type == "image" else 3
                 # For polygon: require at least one ring with enough vertices
@@ -692,14 +717,26 @@ async def upload_form(
 
                 total_inserted = 0
                 for ring_idx, ring in enumerate(rings):
+                    ring_style = ring_styles[ring_idx] if ring_idx < len(ring_styles) and isinstance(ring_styles[ring_idx], dict) else {}
+                    ring_fill_color = ring_style.get("fillColor") or polygon_fill_color or '#0077c0'
+                    ring_line_style = ring_style.get("lineStyle") or polygon_line_style or 'solid'
+                    ring_fill_opacity_raw = ring_style.get("fillOpacity", polygon_fill_opacity)
+                    try:
+                        ring_fill_opacity = float(ring_fill_opacity_raw) if ring_fill_opacity_raw is not None else 0.2
+                    except (TypeError, ValueError):
+                        ring_fill_opacity = 0.2
                     for vertex_order, vertex in enumerate(ring):
                         v_lat = float(vertex["lat"])
                         v_lng = float(vertex["lng"])
                         if not (-90 <= v_lat <= 90) or not (-180 <= v_lng <= 180):
                             raise HTTPException(status_code=400, detail=f"Vertex {vertex_order} in ring {ring_idx} has invalid coordinates")
                         cur.execute(
-                            "INSERT INTO CardPolygonVertices (CardID, RingIndex, VertexOrder, Latitude, Longitude) VALUES (%s, %s, %s, %s, %s)",
-                            (nextcardid, ring_idx, vertex_order, v_lat, v_lng)
+                            """
+                            INSERT INTO CardPolygonVertices
+                                (CardID, RingIndex, VertexOrder, Latitude, Longitude, FillColor, FillOpacity, LineStyle)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                            """,
+                            (nextcardid, ring_idx, vertex_order, v_lat, v_lng, ring_fill_color, ring_fill_opacity, ring_line_style)
                         )
                         total_inserted += 1
                 print(f"[DB] Polygon vertices inserted: {total_inserted} points in {len(rings)} ring(s), fillColor={polygon_fill_color}, lineStyle={polygon_line_style}")

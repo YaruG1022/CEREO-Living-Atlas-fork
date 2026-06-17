@@ -157,6 +157,39 @@ function parseActiveRing(initialVertices, isImageMode) {
     return sorted[sorted.length - 1][1] || [];
 }
 
+function parseActiveRingStyle(initialVertices, isImageMode, fallbackStyle = {}) {
+    if (!initialVertices || initialVertices.length === 0 || isImageMode) {
+        return {
+            fillColor: fallbackStyle.fillColor || DEFAULT_POLYGON_COLOR,
+            fillOpacity: fallbackStyle.fillOpacity ?? 0.15,
+            lineStyle: fallbackStyle.lineStyle || 'solid',
+        };
+    }
+    const hasRingProp = initialVertices.some(v => v.ring !== undefined && v.ring !== 0);
+    if (!hasRingProp) {
+        const first = initialVertices[0] || {};
+        return {
+            fillColor: first.fillColor || fallbackStyle.fillColor || DEFAULT_POLYGON_COLOR,
+            fillOpacity: first.fillOpacity ?? fallbackStyle.fillOpacity ?? 0.15,
+            lineStyle: first.lineStyle || fallbackStyle.lineStyle || 'solid',
+        };
+    }
+    const ringMap = new Map();
+    for (const v of initialVertices) {
+        const r = v.ring ?? 0;
+        if (!ringMap.has(r)) ringMap.set(r, []);
+        ringMap.get(r).push(v);
+    }
+    const sorted = [...ringMap.entries()].sort(([a], [b]) => a - b);
+    const activeRing = sorted[sorted.length - 1]?.[1] || [];
+    const first = activeRing[0] || {};
+    return {
+        fillColor: first.fillColor || fallbackStyle.fillColor || DEFAULT_POLYGON_COLOR,
+        fillOpacity: first.fillOpacity ?? fallbackStyle.fillOpacity ?? 0.15,
+        lineStyle: first.lineStyle || fallbackStyle.lineStyle || 'solid',
+    };
+}
+
 function parseCompletedRings(initialVertices, isImageMode) {
     if (!initialVertices || initialVertices.length === 0 || isImageMode) return [];
     const hasRingProp = initialVertices.some(v => v.ring !== undefined && v.ring !== 0);
@@ -165,10 +198,20 @@ function parseCompletedRings(initialVertices, isImageMode) {
     for (const v of initialVertices) {
         const r = v.ring ?? 0;
         if (!ringMap.has(r)) ringMap.set(r, []);
-        ringMap.get(r).push({ lat: v.lat, lng: v.lng });
+        ringMap.get(r).push(v);
     }
     const sorted = [...ringMap.entries()].sort(([a], [b]) => a - b);
-    return sorted.slice(0, -1).map(([, verts], i) => ({ id: i + 1, num: i + 1, vertices: verts }));
+    return sorted.slice(0, -1).map(([, verts], i) => {
+        const first = verts[0] || {};
+        return {
+            id: i + 1,
+            num: i + 1,
+            vertices: verts.map(v => ({ lat: v.lat, lng: v.lng })),
+            fillColor: first.fillColor || DEFAULT_POLYGON_COLOR,
+            fillOpacity: first.fillOpacity ?? 0.15,
+            lineStyle: first.lineStyle || 'solid',
+        };
+    });
 }
 
 function parseNextRingId(initialVertices, isImageMode) {
@@ -183,15 +226,20 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
     const isImageMode = mode === 'image';
     const minimumVertexCount = isImageMode ? 4 : 3;
     const modalTitle = title || (isImageMode ? 'Place Image' : 'Draw Polygon');
+    const initialActiveRingStyle = parseActiveRingStyle(initialVertices, isImageMode, {
+        fillColor: initialFillColor || DEFAULT_POLYGON_COLOR,
+        fillOpacity: 0.15,
+        lineStyle: initialLineStyle || 'solid',
+    });
     const [vertices, setVertices] = useState(() => parseActiveRing(initialVertices, isImageMode));
     const [isDrawing, setIsDrawing] = useState(!isImageMode && !(initialVertices && initialVertices.length >= minimumVertexCount));
-    const [lineStyle, setLineStyle] = useState(initialLineStyle || 'solid'); // 'solid', 'dashed', 'dotted'
-    const [fillColor, setFillColor] = useState(initialFillColor || DEFAULT_POLYGON_COLOR);
+    const [lineStyle, setLineStyle] = useState(initialActiveRingStyle.lineStyle); // 'solid', 'dashed', 'dotted'
+    const [fillColor, setFillColor] = useState(initialActiveRingStyle.fillColor);
     const [showLineMenu, setShowLineMenu] = useState(false);
     const [showColorMenu, setShowColorMenu] = useState(false);
     const [showShapeMenu, setShowShapeMenu] = useState(false);
     const [showOpacityMenu, setShowOpacityMenu] = useState(false);
-    const [fillOpacity, setFillOpacity] = useState(0.15);
+    const [fillOpacity, setFillOpacity] = useState(initialActiveRingStyle.fillOpacity);
     const [showImageOpacityMenu, setShowImageOpacityMenu] = useState(false);
     const [imageOpacity, setImageOpacity] = useState(0.85);
     const [activeShape, setActiveShape] = useState(null); // 'triangle' | 'square' | 'rectangle' | 'circle' | 'dot' | 'pentagon' | 'hexagon' | null
@@ -239,14 +287,7 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
     const curveMarkersRef = useRef([]); // Mapbox markers for bezier control handles
     const rebuildCurveMarkersRef = useRef(null);
     // ── Multi-polygon (ring) state ──────────────────────────────────────────────
-    const [completedPolygons, setCompletedPolygons] = useState(() =>
-        parseCompletedRings(initialVertices, isImageMode).map(ring => ({
-            ...ring,
-            fillColor: initialFillColor || DEFAULT_POLYGON_COLOR,
-            fillOpacity: 0.15,
-            lineStyle: initialLineStyle || 'solid',
-        }))
-    );
+    const [completedPolygons, setCompletedPolygons] = useState(() => parseCompletedRings(initialVertices, isImageMode));
     const completedPolygonsRef = useRef([]);
     completedPolygonsRef.current = completedPolygons;
     const nextRingIdRef = useRef(parseNextRingId(initialVertices, isImageMode));
@@ -2315,15 +2356,31 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
             return;
         }
         // Collect all rings: completed rings (using live vertices for the actively-edited ring) + any unsaved new ring
-        const allRings = [
+        const ringPayloads = [
             ...completedPolygonsRef.current.map(p => {
-                // For the ring currently being edited, use the live canvas vertices
-                if (p.id === activeRingIdRef.current) return verticesRef.current;
-                return p.vertices;
-            }).filter(verts => verts.length >= minimumVertexCount),
-            // Include unsaved new ring (only when NOT editing an existing one)
-            ...(activeRingIdRef.current === null && vertices.length >= minimumVertexCount ? [vertices] : []),
+                const isEditingRing = p.id === activeRingIdRef.current;
+                return {
+                    vertices: isEditingRing ? verticesRef.current : p.vertices,
+                    fillColor: isEditingRing ? fillColorRef.current : (p.fillColor || DEFAULT_POLYGON_COLOR),
+                    fillOpacity: isEditingRing ? fillOpacityRef.current : (p.fillOpacity ?? 0.15),
+                    lineStyle: isEditingRing ? lineStyleRef.current : (p.lineStyle || 'solid'),
+                };
+            }).filter(r => r.vertices.length >= minimumVertexCount),
+            ...(activeRingIdRef.current === null && vertices.length >= minimumVertexCount
+                ? [{
+                    vertices,
+                    fillColor: fillColorRef.current,
+                    fillOpacity: fillOpacityRef.current,
+                    lineStyle: lineStyleRef.current,
+                }]
+                : []),
         ];
+        const allRings = ringPayloads.map(r => r.vertices);
+        const ringStyles = ringPayloads.map(r => ({
+            fillColor: r.fillColor,
+            fillOpacity: r.fillOpacity,
+            lineStyle: r.lineStyle,
+        }));
         if (allRings.length === 0) {
             alert('A polygon needs at least 3 points.');
             return;
@@ -2334,7 +2391,7 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
             (acc, v) => ({ lat: acc.lat + v.lat / allVerts.length, lng: acc.lng + v.lng / allVerts.length }),
             { lat: 0, lng: 0 }
         );
-        onSave(allRings, centroid, { lineStyle, fillColor, fillOpacity });
+        onSave(allRings, centroid, { lineStyle, fillColor, fillOpacity }, ringStyles);
     };
 
     const handleCancel = () => {
@@ -2722,7 +2779,7 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
                         </span>
                     </div>
                 )}
-                {circleMetaRef.current ? (
+                {activeRingId === null && (circleMetaRef.current ? (
                     (() => {
                         const cLat = circleMetaRef.current.center.lat;
                         const cLng = circleMetaRef.current.center.lng;
@@ -2826,7 +2883,7 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
                             </button>
                         </div>
                     ))
-                )}
+                ))}
             </div>
             )}
 

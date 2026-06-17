@@ -662,13 +662,30 @@ function Card(props) {
             const ringMap = new Map();
             for (const v of pv) {
                 const r = v.ring ?? 0;
-                if (!ringMap.has(r)) ringMap.set(r, []);
-                ringMap.get(r).push({ lat: v.lat, lng: v.lng });
+                if (!ringMap.has(r)) {
+                    ringMap.set(r, {
+                        vertices: [],
+                        style: {
+                            fillColor: v.fillColor,
+                            fillOpacity: v.fillOpacity,
+                            lineStyle: v.lineStyle,
+                        }
+                    });
+                }
+                ringMap.get(r).vertices.push({ lat: v.lat, lng: v.lng });
             }
-            const rings = [...ringMap.entries()].sort(([a], [b]) => a - b).map(([, verts]) => verts);
+            const ordered = [...ringMap.entries()].sort(([a], [b]) => a - b).map(([, data]) => data);
+            const rings = ordered.map(data => data.vertices);
+            const ringStyles = ordered.map(data => ({
+                fillColor: data.style.fillColor || formData.polygon_fill_color,
+                fillOpacity: data.style.fillOpacity ?? formData.polygon_fill_opacity ?? 0.2,
+                lineStyle: data.style.lineStyle || formData.polygon_line_style,
+            }));
             formDataToSend.append('polygon_coordinates', JSON.stringify({
                 rings,
+                ringStyles,
                 fillColor: formData.polygon_fill_color,
+                fillOpacity: formData.polygon_fill_opacity,
                 lineStyle: formData.polygon_line_style
             }));
         }
@@ -913,17 +930,27 @@ function Card(props) {
     }, [formData.cardID, formData.location_type, props.cardID]);
 
     // After polygon edit save: update formData and return to learn-more modal (edit mode)
-    const handlePolygonEditSave = useCallback((allRings, centroid, style) => {
-        // Flatten array-of-rings into a flat array with `ring` index property
-        const flatVerts = allRings.flatMap((ring, ringIdx) => ring.map(v => ({ ...v, ring: ringIdx })));
+    const handlePolygonEditSave = useCallback((allRings, centroid, style, ringStyles = []) => {
+        // Flatten array-of-rings into a flat array with `ring` index property and per-ring style fields
+        const flatVerts = allRings.flatMap((ring, ringIdx) => {
+            const rs = ringStyles[ringIdx] || {};
+            return ring.map(v => ({
+                ...v,
+                ring: ringIdx,
+                fillColor: rs.fillColor,
+                fillOpacity: rs.fillOpacity,
+                lineStyle: rs.lineStyle,
+            }));
+        });
+        const primaryStyle = ringStyles[0] || style || {};
         setFormData(prev => ({
             ...prev,
             polygon_vertices: flatVerts,
             latitude: centroid.lat.toFixed(6),
             longitude: centroid.lng.toFixed(6),
-            polygon_fill_color: style?.fillColor || prev.polygon_fill_color,
-            polygon_line_style: style?.lineStyle || prev.polygon_line_style,
-            polygon_fill_opacity: style?.fillOpacity ?? prev.polygon_fill_opacity,
+            polygon_fill_color: primaryStyle.fillColor || prev.polygon_fill_color,
+            polygon_line_style: primaryStyle.lineStyle || prev.polygon_line_style,
+            polygon_fill_opacity: primaryStyle.fillOpacity ?? prev.polygon_fill_opacity,
         }));
         setIsEditingPolygon(false);
         setIsConvertingToPolygon(false);
@@ -937,7 +964,7 @@ function Card(props) {
         const map = window.atlasMapInstance;
         const cardID = formData.cardID || props.cardID;
         if (map && cardID && flatVerts.length >= (formData.location_type === 'image' ? 4 : 3)) {
-            const fillColor = style?.fillColor || formData.polygon_fill_color || '#0077c0';
+            const fillColor = primaryStyle.fillColor || formData.polygon_fill_color || '#0077c0';
             if (formData.location_type === 'image') {
                 const imageSourceId = `card-image-${cardID}`;
                 const outlineSourceId = `card-image-outline-source-${cardID}`;
@@ -986,7 +1013,7 @@ function Card(props) {
                     });
                 }
 
-                const fillOpacity = style?.fillOpacity ?? 0.2;
+                const fillOpacity = primaryStyle.fillOpacity ?? 0.2;
                 if (map.getLayer(fillLayerId)) {
                     map.setPaintProperty(fillLayerId, 'fill-color', fillColor);
                     map.setPaintProperty(fillLayerId, 'fill-opacity', fillOpacity);
@@ -1947,7 +1974,6 @@ function Card(props) {
                                     value={formData.category || ''}
                                     onChange={handleInputChange}
                                 >
-                                    <option value="">Select a Category</option>
                                     {CARD_CATEGORIES.map((categoryOption) => (
                                         <option key={categoryOption} value={categoryOption}>
                                             {categoryOption}
@@ -2054,7 +2080,6 @@ function Card(props) {
                                 <option value="true">Public (visible to everyone)</option>
                                 <option value="false">Private (only visible to me)</option>
                             </select>
-
                             <div data-onboarding-target="learn-more-coordinates-polygon">
                                 {isOverlayCard ? (
                                     <button type="button" className="learn-more-select-location-btn" onClick={handleEditPolygon}>

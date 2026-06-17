@@ -259,13 +259,30 @@ const FormModal = (props) => {
                 const ringMap = new Map();
                 for (const v of polygonVertices) {
                     const r = v.ring ?? 0;
-                    if (!ringMap.has(r)) ringMap.set(r, []);
-                    ringMap.get(r).push({ lat: v.lat, lng: v.lng });
+                    if (!ringMap.has(r)) {
+                        ringMap.set(r, {
+                            vertices: [],
+                            style: {
+                                fillColor: v.fillColor,
+                                fillOpacity: v.fillOpacity,
+                                lineStyle: v.lineStyle,
+                            }
+                        });
+                    }
+                    ringMap.get(r).vertices.push({ lat: v.lat, lng: v.lng });
                 }
-                const rings = [...ringMap.entries()].sort(([a], [b]) => a - b).map(([, verts]) => verts);
+                const ordered = [...ringMap.entries()].sort(([a], [b]) => a - b).map(([, data]) => data);
+                const rings = ordered.map(data => data.vertices);
+                const ringStyles = ordered.map(data => ({
+                    fillColor: data.style.fillColor || polygonFillColor,
+                    fillOpacity: data.style.fillOpacity ?? 0.2,
+                    lineStyle: data.style.lineStyle || polygonLineStyle,
+                }));
                 formData2.append('polygon_coordinates', JSON.stringify({
                     rings,
+                    ringStyles,
                     fillColor: polygonFillColor,
+                    fillOpacity: 0.2,
                     lineStyle: polygonLineStyle,
                 }));
             }

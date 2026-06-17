@@ -1152,33 +1152,52 @@ const Content1 = (props) => {
         if (!vertices || !Array.isArray(vertices)) continue;
 
         if (feature.location_type === 'polygon' && vertices.length >= 3) {
-          // Group vertices by ring index (support multi-polygon / MultiPolygon)
+          // Group vertices by ring index and preserve per-ring style when provided.
           const ringMap = new Map();
           for (const v of vertices) {
             const r = v.ring ?? 0;
-            if (!ringMap.has(r)) ringMap.set(r, []);
-            ringMap.get(r).push([parseFloat(v.lng), parseFloat(v.lat)]);
+            if (!ringMap.has(r)) {
+              ringMap.set(r, {
+                coords: [],
+                style: {
+                  fillColor: v.fillColor,
+                  fillOpacity: v.fillOpacity,
+                  lineStyle: v.lineStyle,
+                }
+              });
+            }
+            ringMap.get(r).coords.push([parseFloat(v.lng), parseFloat(v.lat)]);
           }
-          const ringCoords = [...ringMap.entries()]
+          const ringFeatures = [...ringMap.entries()]
             .sort(([a], [b]) => a - b)
-            .map(([, pts]) => { const c = [...pts, pts[0]]; return c; });
+            .map(([ringIndex, data]) => {
+              const coords = [...data.coords, data.coords[0]];
+              const style = data.style || {};
+              return {
+                type: 'Feature',
+                properties: {
+                  ring: ringIndex,
+                  fillColor: style.fillColor || feature.polygon_fill_color || '#0077c0',
+                  fillOpacity: style.fillOpacity ?? feature.polygon_fill_opacity ?? 0.2,
+                  lineStyle: style.lineStyle || feature.polygon_line_style || 'solid',
+                },
+                geometry: {
+                  type: 'Polygon',
+                  coordinates: [coords],
+                }
+              };
+            });
 
           const sourceId = `card-polygon-${feature.cardID}`;
           const fillLayerId = `card-polygon-fill-${feature.cardID}`;
           const lineLayerId = `card-polygon-line-${feature.cardID}`;
           const fillColor = feature.polygon_fill_color || '#0077c0';
-          const lineDash = LINE_STYLE_DASH[feature.polygon_line_style] || [];
-
-          // Use MultiPolygon if more than one ring, otherwise Polygon
-          const geometry = ringCoords.length > 1
-            ? { type: 'MultiPolygon', coordinates: ringCoords.map(c => [c]) }
-            : { type: 'Polygon', coordinates: ringCoords };
 
           mapInstance.addSource(sourceId, {
             type: 'geojson',
             data: {
-              type: 'Feature',
-              geometry
+              type: 'FeatureCollection',
+              features: ringFeatures
             }
           });
 
@@ -1187,24 +1206,27 @@ const Content1 = (props) => {
             type: 'fill',
             source: sourceId,
             paint: {
-              'fill-color': fillColor,
-              'fill-opacity': 0.2
+              'fill-color': ['coalesce', ['get', 'fillColor'], fillColor],
+              'fill-opacity': ['coalesce', ['get', 'fillOpacity'], 0.2]
             }
           });
-
-          const linePaint = {
-            'line-color': fillColor,
-            'line-width': 2
-          };
-          if (lineDash.length > 0) {
-            linePaint['line-dasharray'] = lineDash;
-          }
 
           mapInstance.addLayer({
             id: lineLayerId,
             type: 'line',
             source: sourceId,
-            paint: linePaint
+            paint: {
+              'line-color': ['coalesce', ['get', 'fillColor'], fillColor],
+              'line-width': 2,
+              'line-dasharray': [
+                'match',
+                ['coalesce', ['get', 'lineStyle'], 'solid'],
+                'dashed', ['literal', LINE_STYLE_DASH.dashed],
+                'dotted', ['literal', LINE_STYLE_DASH.dotted],
+                'dashdot', ['literal', LINE_STYLE_DASH.dashdot],
+                ['literal', LINE_STYLE_DASH.solid],
+              ]
+            }
           });
 
           mapInstance.on('click', fillLayerId, (e) => {
@@ -1566,12 +1588,27 @@ const Content1 = (props) => {
       {isPolygonToolDrawing && (
         <PolygonDrawingModal
           mode="polygon"
-          onSave={(allRings, centroid, style) => {
+          onSave={(allRings, centroid, style, ringStyles = []) => {
             setIsPolygonToolDrawing(false);
             // Flatten array-of-rings into a flat array with `ring` index property
-            const flatVerts = allRings.flatMap((ring, ringIdx) => ring.map(v => ({ ...v, ring: ringIdx })));
+            const flatVerts = allRings.flatMap((ring, ringIdx) => {
+              const rs = ringStyles[ringIdx] || {};
+              return ring.map(v => ({
+                ...v,
+                ring: ringIdx,
+                fillColor: rs.fillColor,
+                fillOpacity: rs.fillOpacity,
+                lineStyle: rs.lineStyle,
+              }));
+            });
             window.dispatchEvent(new CustomEvent('polygon-tool-save', {
-              detail: { vertices: flatVerts, centroid, fillColor: style?.fillColor, lineStyle: style?.lineStyle }
+              detail: {
+                vertices: flatVerts,
+                centroid,
+                fillColor: style?.fillColor,
+                fillOpacity: style?.fillOpacity,
+                lineStyle: style?.lineStyle
+              }
             }));
           }}
           onCancel={() => setIsPolygonToolDrawing(false)}

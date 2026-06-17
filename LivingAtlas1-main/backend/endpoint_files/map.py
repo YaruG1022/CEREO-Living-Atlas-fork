@@ -10,6 +10,15 @@ from pydantic import BaseModel
 
 map_router = APIRouter()
 
+
+def ensure_polygon_vertex_style_columns(cursor):
+    cursor.execute("""
+        ALTER TABLE CardPolygonVertices
+          ADD COLUMN IF NOT EXISTS FillColor VARCHAR(20),
+          ADD COLUMN IF NOT EXISTS FillOpacity DOUBLE PRECISION,
+          ADD COLUMN IF NOT EXISTS LineStyle VARCHAR(20)
+    """)
+
 class Point(BaseModel):
     lat: float
     long: float
@@ -22,6 +31,7 @@ def getMarkers():
         if connection is None:
             raise HTTPException(status_code=503, detail="Database connection unavailable")
         with connection.cursor() as local_cur:
+            ensure_polygon_vertex_style_columns(local_cur)
             local_cur.execute("""
                 SELECT
                     c.CardID,
@@ -67,7 +77,10 @@ def getMarkers():
                                 jsonb_build_object(
                                     'lat', pv.Latitude,
                                     'lng', pv.Longitude,
-                                    'ring', COALESCE(pv.RingIndex, 0)
+                                    'ring', COALESCE(pv.RingIndex, 0),
+                                    'fillColor', COALESCE(pv.FillColor, c.PolygonFillColor, '#0077c0'),
+                                    'fillOpacity', COALESCE(pv.FillOpacity, 0.2),
+                                    'lineStyle', COALESCE(pv.LineStyle, c.PolygonLineStyle, 'solid')
                                 )
                                 ORDER BY COALESCE(pv.RingIndex, 0) ASC, pv.VertexOrder ASC
                             )
