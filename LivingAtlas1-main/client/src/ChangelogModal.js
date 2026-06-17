@@ -34,6 +34,14 @@ function ChangelogModal({ isOpen, onClose }) {
             <div className="changelog-modal-body">
                 {activeTab === 'latest' && (
                     <>
+                        <h3>Update Date: 6/17/2026</h3>
+                        <ul className="changelog-list">
+                          <li>Fixed multi-polygon rendering: vertices from separate polygon rings were previously cross-connected into one tangled shape; each polygon now renders independently.</li>
+                          <li>Fixed per-polygon style isolation in the Draw Polygon modal: color, opacity, and line style changes now apply only to the selected polygon, not all polygons.</li>
+                          <li>Fixed duplicate vertex list display in the Draw Polygon modal: clicking a polygon to edit it no longer shows its points a second time below the polygon list.</li>
+                          <li>Added visibility (Public / Private) option to the Add Card modal, matching the existing setting in the Learn More edit modal.</li>
+                        </ul>
+
                         <h3>Update Date: 6/12/2026</h3>
                         <ul className="changelog-list">
                           <li>Added card visibility settings (public or uploader-only) in both the Add Card modal and the Learn More modal.</li>

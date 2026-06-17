@@ -26,6 +26,13 @@ function ChangelogHistory() {
             <div className="changelog-history-body">
                 {activeTab === 'latest' && (
                     <>
+                        <h3>Update Date: 6/17/2026</h3>
+                        <p>Fixed multi-polygon rendering: vertices from separate polygon rings were previously cross-connected into one tangled shape; each polygon now renders independently.</p>
+                        <p>Fixed per-polygon style isolation in the Draw Polygon modal: color, opacity, and line style changes now apply only to the selected polygon, not all polygons.</p>
+                        <p>Fixed duplicate vertex list display in the Draw Polygon modal: clicking a polygon to edit it no longer shows its points a second time below the polygon list.</p>
+                        <p>Added visibility (Public / Private) option to the Add Card modal, matching the existing setting in the Learn More edit modal.</p>
+                        <hr />
+
                         <h3>Update Date: 6/12/2026</h3>
                         <p>Added card visibility settings (public or uploader-only) in both the Add Card modal and the Learn More modal.</p>
                         <p>Added a user feedback input box on the Contact page.</p>
