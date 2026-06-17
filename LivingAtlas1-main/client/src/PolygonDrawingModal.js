@@ -239,7 +239,14 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
     const curveMarkersRef = useRef([]); // Mapbox markers for bezier control handles
     const rebuildCurveMarkersRef = useRef(null);
     // ── Multi-polygon (ring) state ──────────────────────────────────────────────
-    const [completedPolygons, setCompletedPolygons] = useState(() => parseCompletedRings(initialVertices, isImageMode));
+    const [completedPolygons, setCompletedPolygons] = useState(() =>
+        parseCompletedRings(initialVertices, isImageMode).map(ring => ({
+            ...ring,
+            fillColor: initialFillColor || DEFAULT_POLYGON_COLOR,
+            fillOpacity: 0.15,
+            lineStyle: initialLineStyle || 'solid',
+        }))
+    );
     const completedPolygonsRef = useRef([]);
     completedPolygonsRef.current = completedPolygons;
     const nextRingIdRef = useRef(parseNextRingId(initialVertices, isImageMode));
@@ -637,7 +644,7 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
 
     // \u2500\u2500 Multi-polygon callbacks \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     // Add a completed ring as a static visual overlay on the map
-    const addCompletedRingToMap = useCallback((ringId, ringVertices) => {
+    const addCompletedRingToMap = useCallback((ringId, ringVertices, style) => {
         if (isImageMode || ringVertices.length < 3) return;
         const map = window.atlasMapInstance;
         if (!map) return;
@@ -646,6 +653,9 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
         const fillLayId = compRingFillId(ringId);
         const coords = ringVertices.map(v => [v.lng, v.lat]);
         coords.push(coords[0]);
+        const color = style?.fillColor ?? fillColorRef.current;
+        const opacity = style?.fillOpacity ?? fillOpacityRef.current;
+        const lStyle = style?.lineStyle ?? lineStyleRef.current;
         if (!map.getSource(srcId)) {
             map.addSource(srcId, {
                 type: 'geojson',
@@ -657,17 +667,17 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
                 id: fillLayId,
                 type: 'fill',
                 source: srcId,
-                paint: { 'fill-color': fillColorRef.current, 'fill-opacity': fillOpacityRef.current }
+                paint: { 'fill-color': color, 'fill-opacity': opacity }
             });
         }
         if (!map.getLayer(lineLayId)) {
-            const dash = LINE_STYLES[lineStyleRef.current] || [];
+            const dash = LINE_STYLES[lStyle] || [];
             map.addLayer({
                 id: lineLayId,
                 type: 'line',
                 source: srcId,
                 paint: {
-                    'line-color': fillColorRef.current,
+                    'line-color': color,
                     'line-width': 1.5,
                     ...(dash.length > 0 ? { 'line-dasharray': dash } : {}),
                 }
@@ -705,19 +715,20 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
             map.getCanvas().style.cursor = '';
         }
         const currentVerts = [...verticesRef.current];
+        const currentStyle = { fillColor: fillColorRef.current, fillOpacity: fillOpacityRef.current, lineStyle: lineStyleRef.current };
         if (activeRingIdRef.current !== null) {
-            // Update the existing ring's vertices in-place, re-add its static overlay
+            // Update the existing ring's vertices and style in-place, re-add its static overlay
             const editedId = activeRingIdRef.current;
             setCompletedPolygons(prev => prev.map(p =>
-                p.id === editedId ? { ...p, vertices: currentVerts } : p
+                p.id === editedId ? { ...p, vertices: currentVerts, ...currentStyle } : p
             ));
-            addCompletedRingToMap(editedId, currentVerts);
+            addCompletedRingToMap(editedId, currentVerts, currentStyle);
             setActiveRingId(null);
         } else {
             // Save the new ring and advance the num counter
             const ringId = nextRingIdRef.current++;
-            addCompletedRingToMap(ringId, currentVerts);
-            setCompletedPolygons(prev => [...prev, { id: ringId, num: activeRingNumRef.current, vertices: currentVerts }]);
+            addCompletedRingToMap(ringId, currentVerts, currentStyle);
+            setCompletedPolygons(prev => [...prev, { id: ringId, num: activeRingNumRef.current, vertices: currentVerts, ...currentStyle }]);
             setActiveRingNum(nextNewNumRef.current++);
         }
         // Clear active drawing state
@@ -1654,18 +1665,19 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
         const currentVerts = verticesRef.current;
         const prevActiveRingId = activeRingIdRef.current;
 
-        // Save current canvas state before switching
+        // Save current canvas state (vertices + style) before switching
+        const currentStyle = { fillColor: fillColorRef.current, fillOpacity: fillOpacityRef.current, lineStyle: lineStyleRef.current };
         if (prevActiveRingId !== null) {
-            // Was editing an existing ring — save its vertices back & restore its map overlay
+            // Was editing an existing ring — save its vertices and style back & restore its map overlay
             setCompletedPolygons(prev => prev.map(p =>
-                p.id === prevActiveRingId ? { ...p, vertices: [...currentVerts] } : p
+                p.id === prevActiveRingId ? { ...p, vertices: [...currentVerts], ...currentStyle } : p
             ));
-            addCompletedRingToMap(prevActiveRingId, currentVerts);
+            addCompletedRingToMap(prevActiveRingId, currentVerts, currentStyle);
         } else if (currentVerts.length >= 3) {
             // Was drawing a brand-new ring — auto-save it as a completed ring
             const newRingId = nextRingIdRef.current++;
-            addCompletedRingToMap(newRingId, currentVerts);
-            setCompletedPolygons(prev => [...prev, { id: newRingId, num: activeRingNumRef.current, vertices: [...currentVerts] }]);
+            addCompletedRingToMap(newRingId, currentVerts, currentStyle);
+            setCompletedPolygons(prev => [...prev, { id: newRingId, num: activeRingNumRef.current, vertices: [...currentVerts], ...currentStyle }]);
             setActiveRingNum(nextNewNumRef.current++);
         }
 
@@ -1687,8 +1699,11 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
         curveMarkersRef.current.forEach(m => m.remove());
         curveMarkersRef.current = [];
         circleMetaRef.current = null;
-        // Load target ring's vertices into the drawing canvas
+        // Load target ring's vertices and style into the drawing canvas
         const targetVerts = targetRing.vertices;
+        setFillColor(targetRing.fillColor || DEFAULT_POLYGON_COLOR);
+        setFillOpacity(targetRing.fillOpacity ?? 0.15);
+        setLineStyle(targetRing.lineStyle || 'solid');
         setCurveControlPoints({});
         curveControlPointsRef.current = {};
         curveVertexCountRef.current = targetVerts.length;
@@ -1807,8 +1822,8 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
             updateMarkerLabels(false); // editing mode: hide labels initially
         }
         // Render static overlays for all completed rings (rings other than the active one)
-        parseCompletedRings(initialVertices, isImageMode).forEach(ring => {
-            addCompletedRingToMap(ring.id, ring.vertices);
+        completedPolygonsRef.current.forEach(ring => {
+            addCompletedRingToMap(ring.id, ring.vertices, ring);
         });
 
         // Click handler for adding vertices
@@ -2199,20 +2214,21 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
         // Move the active polygon into completedPolygons so it shows as a finished ring
         const currentVerts = verticesRef.current;
         if (currentVerts.length >= 3) {
+            const currentStyle = { fillColor: fillColorRef.current, fillOpacity: fillOpacityRef.current, lineStyle: lineStyleRef.current };
             if (activeRingIdRef.current !== null) {
-                // Editing an existing ring — save vertices back in-place, restore its overlay
+                // Editing an existing ring — save vertices and style back in-place, restore its overlay
                 const editedId = activeRingIdRef.current;
                 setCompletedPolygons(prev => prev.map(p =>
-                    p.id === editedId ? { ...p, vertices: [...currentVerts] } : p
+                    p.id === editedId ? { ...p, vertices: [...currentVerts], ...currentStyle } : p
                 ));
-                addCompletedRingToMap(editedId, currentVerts);
+                addCompletedRingToMap(editedId, currentVerts, currentStyle);
                 setActiveRingId(null);
             } else {
                 // New ring — add to list; do NOT advance nextNewNumRef here
                 // (the counter only advances when the user starts drawing the NEXT new ring)
                 const ringId = nextRingIdRef.current++;
-                addCompletedRingToMap(ringId, currentVerts);
-                setCompletedPolygons(prev => [...prev, { id: ringId, num: activeRingNumRef.current, vertices: [...currentVerts] }]);
+                addCompletedRingToMap(ringId, currentVerts, currentStyle);
+                setCompletedPolygons(prev => [...prev, { id: ringId, num: activeRingNumRef.current, vertices: [...currentVerts], ...currentStyle }]);
             }
             // Clear active drawing state
             markersRef.current.forEach(m => m.remove());

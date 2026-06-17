@@ -119,6 +119,7 @@ const FormModal = (props) => {
         tags: '',
         latitude: '',
         longitude: '',
+        is_public: true,                  // visibility: public by default
     });
 
     const [links, setLinks] = useState([{ url: '', text: '' }]);
@@ -228,6 +229,7 @@ const FormModal = (props) => {
             ...formData,
             username: props.username || formData.username,
             category: formData.category || 'None',
+            is_public: formData.is_public !== false ? 1 : 0,  // Convert to database format
         };
 
         const formData2 = new FormData();
@@ -707,6 +709,16 @@ const FormModal = (props) => {
 
                     <label>Tags (comma-separated) (optional):</label>
                     <input type="text" name="tags" value={formData.tags} onChange={handleInputChange} />
+
+                    <label>Visibility:</label>
+                    <select
+                        name="is_public"
+                        value={formData.is_public !== false ? "true" : "false"}
+                        onChange={(e) => setFormData(prev => ({ ...prev, is_public: e.target.value !== "false" }))}
+                    >
+                        <option value="true">Public (visible to everyone)</option>
+                        <option value="false">Private (only visible to me)</option>
+                    </select>
 
                     <label>Attach Images (optional):</label>
                     <div
