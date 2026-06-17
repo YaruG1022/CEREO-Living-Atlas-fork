@@ -66,9 +66,10 @@ def getMarkers():
                             SELECT json_agg(
                                 jsonb_build_object(
                                     'lat', pv.Latitude,
-                                    'lng', pv.Longitude
+                                    'lng', pv.Longitude,
+                                    'ring', COALESCE(pv.RingIndex, 0)
                                 )
-                                ORDER BY pv.VertexOrder ASC
+                                ORDER BY COALESCE(pv.RingIndex, 0) ASC, pv.VertexOrder ASC
                             )
                             FROM CardPolygonVertices pv
                             WHERE pv.CardID = c.CardID
