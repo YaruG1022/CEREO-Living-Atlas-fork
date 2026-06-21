@@ -331,6 +331,8 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
 
     const POLYGON_LINE_SOURCE = 'card-polygon-draw-line';
     const POLYGON_LINE_LAYER = 'card-polygon-draw-line-layer';
+    // Soft drop-shadow layer shown beneath the currently selected polygon
+    const RING_SELECTED_SHADOW_LAYER = 'card-polygon-draw-selected-shadow';
     const POLYGON_FILL_SOURCE = 'card-polygon-draw-fill';
     const POLYGON_FILL_LAYER = 'card-polygon-draw-fill-layer';
     const IMAGE_SOURCE = 'card-polygon-draw-image';
@@ -1775,17 +1777,40 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
             map.getCanvas().style.cursor = 'crosshair';
         }
         setIsDrawing(true);
-        // Fly to the polygon's bounds
-        if (map && targetVerts.length >= 2) {
-            const lats = targetVerts.map(v => v.lat);
-            const lngs = targetVerts.map(v => v.lng);
-            map.fitBounds(
-                [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
-                { padding: 80, maxZoom: 16 }
-            );
-        }
     }, [isImageMode, isDragMode, stopDragMode, isRotateMode, stopRotateMode, isResizeMode, stopResizeMode,
         addCompletedRingToMap, removeCompletedRingFromMap, updatePolygonOnMap, syncCurveGeometry, rebuildMarkers]);
+
+    // Show/hide a soft drop-shadow beneath the currently selected (active) polygon.
+    // Triggered when a polygon's point area is clicked/selected — not on hover.
+    const updateSelectedRingShadow = useCallback((show) => {
+        if (isImageMode) return;
+        const map = window.atlasMapInstance;
+        if (!map) return;
+        // Always clear any existing selection shadow first
+        if (map.getLayer(RING_SELECTED_SHADOW_LAYER)) map.removeLayer(RING_SELECTED_SHADOW_LAYER);
+        if (!show) return;
+        if (!map.getSource(POLYGON_FILL_SOURCE)) return;
+        // Insert a blurred, semi-transparent line below the polygon so it reads as a soft shadow
+        map.addLayer({
+            id: RING_SELECTED_SHADOW_LAYER,
+            type: 'line',
+            source: POLYGON_FILL_SOURCE,
+            layout: { 'line-cap': 'round', 'line-join': 'round' },
+            paint: {
+                'line-color': 'rgba(0, 0, 0, 0.35)',
+                'line-width': 10,
+                'line-blur': 8,
+                'line-opacity': 0.45,
+            },
+        }, map.getLayer(POLYGON_FILL_LAYER) ? POLYGON_FILL_LAYER : undefined);
+    }, [isImageMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Show the soft shadow whenever a polygon is selected (active for editing), hide it otherwise
+    useEffect(() => {
+        updateSelectedRingShadow(activeRingId !== null);
+    }, [activeRingId, updateSelectedRingShadow]);
+
+
 
 
     // Position modal flush with the draw control bar
@@ -1942,6 +1967,8 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
         map.on('mousedown', POLYGON_LINE_LAYER, onCurveLineMouseDown);
 
         return () => {
+            // Remove selection shadow overlay
+            if (map.getLayer(RING_SELECTED_SHADOW_LAYER)) map.removeLayer(RING_SELECTED_SHADOW_LAYER);
             // Remove completed ring overlays
             completedRingLayersRef.current.forEach(({ srcId, lineLayId, fillLayId }) => {
                 if (map.getLayer(fillLayId)) map.removeLayer(fillLayId);
