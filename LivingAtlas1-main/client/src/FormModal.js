@@ -263,13 +263,23 @@ const FormModal = (props) => {
                         ringMap.set(r, {
                             vertices: [],
                             style: {
-                                fillColor: v.fillColor,
-                                fillOpacity: v.fillOpacity,
-                                lineStyle: v.lineStyle,
+                                fillColor: undefined,
+                                fillOpacity: undefined,
+                                lineStyle: undefined,
                             }
                         });
                     }
-                    ringMap.get(r).vertices.push({ lat: v.lat, lng: v.lng });
+                    const ringData = ringMap.get(r);
+                    ringData.vertices.push({ lat: v.lat, lng: v.lng });
+                    if (v.fillColor !== undefined && v.fillColor !== null && v.fillColor !== '') {
+                        ringData.style.fillColor = v.fillColor;
+                    }
+                    if (v.fillOpacity !== undefined && v.fillOpacity !== null && v.fillOpacity !== '') {
+                        ringData.style.fillOpacity = v.fillOpacity;
+                    }
+                    if (v.lineStyle !== undefined && v.lineStyle !== null && v.lineStyle !== '') {
+                        ringData.style.lineStyle = v.lineStyle;
+                    }
                 }
                 const ordered = [...ringMap.entries()].sort(([a], [b]) => a - b).map(([, data]) => data);
                 const rings = ordered.map(data => data.vertices);
