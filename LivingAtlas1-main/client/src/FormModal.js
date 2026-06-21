@@ -473,14 +473,23 @@ const FormModal = (props) => {
         window.dispatchEvent(new CustomEvent('map-image-tool-start'));
     };
 
-    const handlePolygonSave = (allRings, centroid, style) => {
-        // Flatten array-of-rings into a flat array with `ring` index property
-        const flatVerts = allRings.flatMap((ring, ringIdx) => ring.map(v => ({ ...v, ring: ringIdx })));
+    const handlePolygonSave = (allRings, centroid, style, ringStyles = []) => {
+        // Flatten array-of-rings into a flat array with `ring` index property and
+        // per-ring style fields so each polygon keeps its own color/opacity/line style.
+        const flatVerts = allRings.flatMap((ring, ringIdx) => {
+            const rs = ringStyles[ringIdx] || {};
+            return ring.map(v => ({
+                ...v,
+                ring: ringIdx,
+                fillColor: rs.fillColor,
+                fillOpacity: rs.fillOpacity,
+                lineStyle: rs.lineStyle,
+            }));
+        });
         setPolygonVertices(flatVerts);
-        if (style) {
-            if (style.fillColor) setPolygonFillColor(style.fillColor);
-            if (style.lineStyle) setPolygonLineStyle(style.lineStyle);
-        }
+        const primaryStyle = ringStyles[0] || style || {};
+        if (primaryStyle.fillColor) setPolygonFillColor(primaryStyle.fillColor);
+        if (primaryStyle.lineStyle) setPolygonLineStyle(primaryStyle.lineStyle);
         setFormData(prev => ({
             ...prev,
             latitude: centroid.lat.toFixed(6),
