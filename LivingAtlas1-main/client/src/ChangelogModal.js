@@ -34,6 +34,13 @@ function ChangelogModal({ isOpen, onClose }) {
             <div className="changelog-modal-body">
                 {activeTab === 'latest' && (
                     <>
+                        <h3>Update Date: 6/21/2026</h3>
+                        <ul className="changelog-list">
+                          <li>Fixed polygon color display: a card represented by multiple polygons with different colors now keeps each polygon's own color after saving, instead of all polygons collapsing to a single color.</li>
+                          <li>Removed the zoom-to-location behavior when selecting a polygon while editing; the selected polygon now shows a soft drop-shadow highlight instead.</li>
+                          <li>Added an RGB color picker to the color options in the Draw Polygon modal, letting users pick custom colors in addition to the preset quick-select swatches.</li>
+                        </ul>
+
                         <h3>Update Date: 6/17/2026</h3>
                         <ul className="changelog-list">
                           <li>Fixed multi-polygon rendering: vertices from separate polygon rings were previously cross-connected into one tangled shape; each polygon now renders independently.</li>
