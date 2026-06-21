@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 import mapboxgl from 'mapbox-gl';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faHand, faRotate, faUpRightAndDownLeftFromCenter, faRotateLeft, faRotateRight, faTrash, faShapes, faPalette } from '@fortawesome/free-solid-svg-icons';
+import { HexColorPicker } from 'react-colorful';
 import './PolygonDrawingModal.css';
 
 const BEZIER_STEPS = 24; // interpolation points per edge
@@ -17,9 +18,16 @@ const LINE_STYLES = {
 };
 
 const PALETTE_COLORS = [
-    '#0077c0', '#e74c3c', '#27ae60', '#f39c12', '#8e44ad',
-    '#1abc9c', '#2c3e50', '#d35400', '#c0392b', '#2980b9',
+    '#0077c0', '#e74c3c', '#27ae60', '#f39c12',
+    '#8e44ad', '#1abc9c', '#2c3e50', '#000000',
 ];
+
+const HEX_COLOR_RE = /^#([0-9a-fA-F]{6})$/;
+const normalizeHexColor = (value) => {
+    if (typeof value !== 'string') return DEFAULT_POLYGON_COLOR;
+    const v = value.trim();
+    return HEX_COLOR_RE.test(v) ? v : DEFAULT_POLYGON_COLOR;
+};
 
 function quadBezierSeg(p0, c, p1) {
     const p0Merc = lngLatToMercator(p0);
@@ -235,6 +243,7 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
     const [isDrawing, setIsDrawing] = useState(!isImageMode && !(initialVertices && initialVertices.length >= minimumVertexCount));
     const [lineStyle, setLineStyle] = useState(initialActiveRingStyle.lineStyle); // 'solid', 'dashed', 'dotted'
     const [fillColor, setFillColor] = useState(initialActiveRingStyle.fillColor);
+    const [hexInput, setHexInput] = useState(initialActiveRingStyle.fillColor || DEFAULT_POLYGON_COLOR);
     const [showLineMenu, setShowLineMenu] = useState(false);
     const [showColorMenu, setShowColorMenu] = useState(false);
     const [showShapeMenu, setShowShapeMenu] = useState(false);
@@ -356,7 +365,7 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
         const map = window.atlasMapInstance;
         if (isImageMode) return;
         if (!map) return;
-        const activeColor = fillColor || DEFAULT_POLYGON_COLOR;
+        const activeColor = normalizeHexColor(fillColor);
         if (map.getLayer(POLYGON_LINE_LAYER)) {
             map.setPaintProperty(POLYGON_LINE_LAYER, 'line-color', activeColor);
         }
@@ -371,6 +380,11 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
             if (lbl) lbl.style.color = activeColor;
         });
     }, [fillColor, isImageMode]);
+
+    // Keep the hex text input in sync when fillColor changes from presets / the color picker
+    useEffect(() => {
+        if (HEX_COLOR_RE.test(fillColor || '')) setHexInput(fillColor);
+    }, [fillColor]);
 
     // Update fill opacity on map when fillOpacity changes
     useEffect(() => {
@@ -2511,16 +2525,47 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
                         <FontAwesomeIcon icon={faPalette} className="polygon-draw-fill-color-icon" style={{ fontSize: 14, width: 16, height: 16 }} />
                     </button>
                     {showColorMenu && (
-                        <div className="polygon-draw-dropdown polygon-draw-color-grid">
-                            {PALETTE_COLORS.map(c => (
-                                <button
-                                    key={c}
-                                    type="button"
-                                    className={`polygon-draw-color-option${fillColor === c ? ' active' : ''}`}
-                                    style={{ background: c }}
-                                    onClick={() => { saveToHistoryRef.current?.(); setFillColor(c); setShowColorMenu(false); }}
+                        <div className="polygon-draw-dropdown polygon-draw-color-menu">
+                            <div className="polygon-draw-color-grid">
+                                {PALETTE_COLORS.map(c => (
+                                    <button
+                                        key={c}
+                                        type="button"
+                                        className={`polygon-draw-color-option${fillColor === c ? ' active' : ''}`}
+                                        style={{ background: c }}
+                                        onClick={() => { saveToHistoryRef.current?.(); setFillColor(c); setShowColorMenu(false); }}
+                                    />
+                                ))}
+                            </div>
+                            <div className="polygon-draw-color-custom">
+                                <HexColorPicker
+                                    className="polygon-draw-color-picker"
+                                    color={normalizeHexColor(fillColor)}
+                                    onMouseDown={() => saveToHistoryRef.current?.()}
+                                    onChange={(c) => setFillColor(c)}
                                 />
-                            ))}
+                                <input
+                                    type="text"
+                                    className="polygon-draw-color-hex"
+                                    value={hexInput}
+                                    spellCheck={false}
+                                    maxLength={7}
+                                    placeholder="#RRGGBB"
+                                    onChange={(e) => {
+                                        let v = e.target.value;
+                                        if (v && !v.startsWith('#')) v = '#' + v;
+                                        setHexInput(v);
+                                        if (HEX_COLOR_RE.test(v)) {
+                                            saveToHistoryRef.current?.();
+                                            setFillColor(v);
+                                        }
+                                    }}
+                                    onBlur={() => {
+                                        if (!HEX_COLOR_RE.test(hexInput)) setHexInput(normalizeHexColor(fillColor));
+                                    }}
+                                    aria-label="Hex color value"
+                                />
+                            </div>
                         </div>
                     )}
                 </div>

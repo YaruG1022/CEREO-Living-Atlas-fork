@@ -134,6 +134,67 @@
     box-shadow: 0 0 0 1px #fff inset;
 }
 
+/* Custom RGB color picker row */
+.polygon-draw-color-menu {
+    width: 176px;
+    min-width: 176px;
+    padding: 4px;
+}
+
+.polygon-draw-color-menu .polygon-draw-color-grid {
+    width: 100%;
+    min-width: 0;
+    padding: 2px;
+}
+
+.polygon-draw-color-custom {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    margin-top: 4px;
+    padding: 6px;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+/* react-colorful palette sizing */
+.polygon-draw-color-picker.react-colorful {
+    width: 100%;
+    height: 140px;
+}
+
+.polygon-draw-color-picker .react-colorful__saturation {
+    border-radius: 4px 4px 0 0;
+}
+
+.polygon-draw-color-picker .react-colorful__hue {
+    height: 16px;
+    border-radius: 0 0 4px 4px;
+}
+
+.polygon-draw-color-picker .react-colorful__pointer {
+    width: 14px;
+    height: 14px;
+}
+
+.polygon-draw-color-hex {
+    width: 100%;
+    min-width: 0;
+    padding: 4px 6px;
+    font-size: 11px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    text-transform: uppercase;
+    color: #333;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+    outline: none;
+    box-sizing: border-box;
+}
+
+.polygon-draw-color-hex:focus {
+    border-color: #0077c0;
+}
+
 /* Opacity swatch & dropdown */
 .polygon-draw-opacity-swatch {
     display: inline-block;
