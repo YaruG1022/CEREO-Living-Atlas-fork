@@ -1,0 +1,90 @@
+/* CoordinatesPanel reuses the polygon drawing panel's look (PolygonDrawingModal.css).
+   These rules only add the per-point icon picker and small layout tweaks so the
+   icon button fits next to the lat/lng inputs. */
+
+/* Make room for the icon button by trimming the coordinate inputs slightly. */
+.coordinates-panel .polygon-draw-vertex-input {
+    width: 58px;
+}
+
+.coordinates-panel-icon-wrap {
+    flex-shrink: 0;
+}
+
+.coordinates-panel-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    background: #fafafa;
+    color: #d9381e;
+    cursor: pointer;
+    padding: 0;
+    font-size: 11px;
+}
+
+.coordinates-panel-icon-btn:hover {
+    background: #fff;
+    border-color: #2563eb;
+}
+
+.coordinates-panel-icon-btn.active {
+    border-color: #d9381e;
+    background: #fdecea;
+}
+
+.coordinates-panel-icon-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 3px;
+    padding: 5px 6px 7px;
+    margin: 0 2px 6px 22px;
+    background: #f7f8fa;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+}
+
+.coordinates-panel-icon-option {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    background: #f5f5f5;
+    color: #333;
+    cursor: pointer;
+    padding: 0;
+    font-size: 12px;
+}
+
+.coordinates-panel-icon-option:hover {
+    background: rgba(0, 0, 0, .06);
+}
+
+.coordinates-panel-icon-option.active {
+    border-color: #d9381e;
+    color: #d9381e;
+    background: #fdecea;
+}
+
+/* On-map marker element built by buildMarkerIconElement(). */
+.multipoint-map-marker {
+    font-size: 28px;
+    line-height: 1;
+    cursor: pointer;
+    filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.35));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.multipoint-map-marker svg {
+    width: 1em;
+    height: 1em;
+    display: block;
+}

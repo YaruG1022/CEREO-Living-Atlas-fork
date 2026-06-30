@@ -166,6 +166,11 @@ def _ensure_schema():
             ALTER TABLE CardPolygonVertices ADD COLUMN IF NOT EXISTS RingIndex INT DEFAULT 0;
         """)
 
+        # Migration 012 — Icon column for multi-point marker icons
+        cur.execute("""
+            ALTER TABLE CardPolygonVertices ADD COLUMN IF NOT EXISTS Icon VARCHAR(60);
+        """)
+
         conn.commit()
         print("[MIGRATIONS] Schema is up-to-date.")
     except Exception as e:

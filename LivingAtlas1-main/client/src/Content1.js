@@ -14,6 +14,7 @@ import PolygonDrawingModal from './PolygonDrawingModal';
 import html2canvas from 'html2canvas';
 import { icon } from '@fortawesome/fontawesome-svg-core';
 import { faEye, faEyeSlash, faCamera, faImage, faLocationDot, faPlus, faDrawPolygon } from '@fortawesome/free-solid-svg-icons';
+import { buildMarkerIconElement } from './markerIcons';
 
 // Mapbox Token
 mapboxgl.accessToken =
@@ -1060,6 +1061,36 @@ const Content1 = (props) => {
           (feature.location_type === 'polygon' && feature.polygon_vertices && feature.polygon_vertices.length >= 3) ||
           (feature.location_type === 'image' && feature.polygon_vertices && feature.polygon_vertices.length >= 4)
         ) {
+          continue;
+        }
+
+        // Multi-point cards: render one marker per stored point, each with its own icon
+        if (feature.location_type === 'multipoint' && feature.polygon_vertices && feature.polygon_vertices.length > 0) {
+          feature.polygon_vertices.forEach((pt) => {
+            const lng = parseFloat(pt.lng);
+            const lat = parseFloat(pt.lat);
+            if (isNaN(lng) || isNaN(lat)) return;
+
+            const pointEl = buildMarkerIconElement(pt.icon);
+            const pointMarker = new mapboxgl.Marker({ element: pointEl, anchor: 'bottom' });
+            pointMarker.setLngLat([lng, lat]);
+            yellowMarkers.push([feature.category, feature.tags, [lng, lat]]);
+
+            pointMarker.getElement().addEventListener('click', (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              if (markerPopupRef.current && openMarkerIdRef.current === feature.cardID) {
+                closeMarkerPopup();
+                return;
+              }
+              marker_clicked = true;
+              setSearchCondition(feature.title);
+              openMarkerPopup(feature, pointMarker, map);
+            });
+
+            pointMarker.addTo(map);
+            allMarkers.push(pointMarker);
+          });
           continue;
         }
 

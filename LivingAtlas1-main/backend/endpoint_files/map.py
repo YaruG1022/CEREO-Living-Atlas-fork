@@ -16,7 +16,8 @@ def ensure_polygon_vertex_style_columns(cursor):
         ALTER TABLE CardPolygonVertices
           ADD COLUMN IF NOT EXISTS FillColor VARCHAR(20),
           ADD COLUMN IF NOT EXISTS FillOpacity DOUBLE PRECISION,
-          ADD COLUMN IF NOT EXISTS LineStyle VARCHAR(20)
+          ADD COLUMN IF NOT EXISTS LineStyle VARCHAR(20),
+          ADD COLUMN IF NOT EXISTS Icon VARCHAR(60)
     """)
 
 class Point(BaseModel):
@@ -80,7 +81,8 @@ def getMarkers():
                                     'ring', COALESCE(pv.RingIndex, 0),
                                     'fillColor', COALESCE(pv.FillColor, c.PolygonFillColor, '#0077c0'),
                                     'fillOpacity', COALESCE(pv.FillOpacity, 0.2),
-                                    'lineStyle', COALESCE(pv.LineStyle, c.PolygonLineStyle, 'solid')
+                                    'lineStyle', COALESCE(pv.LineStyle, c.PolygonLineStyle, 'solid'),
+                                    'icon', pv.Icon
                                 )
                                 ORDER BY COALESCE(pv.RingIndex, 0) ASC, pv.VertexOrder ASC
                             )

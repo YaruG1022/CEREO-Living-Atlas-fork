@@ -1,10 +1,10 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import Modal from 'react-modal';
-import mapboxgl from 'mapbox-gl';
 import './FormModal.css';
 import api from './api.js';
 import PolygonDrawingModal from './PolygonDrawingModal';
+import CoordinatesPanel from './CoordinatesPanel';
 import ArcGISPickerModal from './ArcGISPickerModal';
 import CreateCardModalOnboarding from './OnboardingCreateCardModal';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -20,16 +20,16 @@ function serializeLinks(links) {
 
 const FormModal = (props) => {
     const [modalIsOpen, setModalIsOpen] = useState(false);
-    const [isSelectingLocation, setIsSelectingLocation] = useState(false);
     const [isDrawingPolygon, setIsDrawingPolygon] = useState(false);
     const [isPlacingImageOverlay, setIsPlacingImageOverlay] = useState(false);
+    const [isPlacingMultipoint, setIsPlacingMultipoint] = useState(false);
     const [isCreateCardOnboardingOpen, setIsCreateCardOnboardingOpen] = useState(false);
-    const [locationType, setLocationType] = useState('point'); // 'point' | 'polygon' | 'image'
+    const [locationType, setLocationType] = useState('point'); // 'point' (1+ coordinates) | 'polygon' | 'image'
+    const [multiPoints, setMultiPoints] = useState([]); // [{ lat, lng, icon }]
     const [polygonVertices, setPolygonVertices] = useState([]);
     const [polygonFillColor, setPolygonFillColor] = useState('#0077c0');
     const [polygonLineStyle, setPolygonLineStyle] = useState('solid');
     const isModalOpen = modalIsOpen || props.isOpen;
-    const selectLocationMarker = useRef(null);
     const lastPointToolSignalRef = useRef(null);
     const shouldCloseOnPointCancelRef = useRef(false);
 
@@ -80,11 +80,8 @@ const FormModal = (props) => {
         setModalIsOpen(false);
         setIsDrawingPolygon(false);
         setIsPlacingImageOverlay(false);
+        setIsPlacingMultipoint(false);
         setIsCreateCardOnboardingOpen(false);
-        if (selectLocationMarker.current) {
-            selectLocationMarker.current.remove();
-            selectLocationMarker.current = null;
-        }
         if (props.onRequestClose) {
             props.onRequestClose();
         }
@@ -98,7 +95,7 @@ const FormModal = (props) => {
         setIsCreateCardOnboardingOpen(true);
     };
 
-    const isCreateCardModalVisible = isModalOpen && !isSelectingLocation && !isDrawingPolygon && !isPlacingImageOverlay;
+    const isCreateCardModalVisible = isModalOpen && !isDrawingPolygon && !isPlacingImageOverlay && !isPlacingMultipoint;
 
     useEffect(() => {
         if (!isCreateCardModalVisible && isCreateCardOnboardingOpen) {
@@ -205,8 +202,12 @@ const FormModal = (props) => {
             if (placedSlots.length === 0 && polygonVertices.length < 4) errors.push("Image overlay must have at least one placed image.");
             if (!overlayImageFile && !overlayImagePreview && placedSlots.length === 0) errors.push("At least one image is required for the map overlay.");
         } else {
-            if (!/^(-?\d+(\.\d{1,8})?)$/.test(formData.latitude)) errors.push("Latitude format is invalid.");
-            if (!/^(-?\d+(\.\d{1,8})?)$/.test(formData.longitude)) errors.push("Longitude format is invalid.");
+            // 'point' tab: when coordinates were placed via the Add Points panel it's a
+            // multi-point card; otherwise validate the manually-typed single coordinate.
+            if (multiPoints.length < 1) {
+                if (!/^(-?\d+(\.\d{1,8})?)$/.test(formData.latitude)) errors.push("Latitude format is invalid.");
+                if (!/^(-?\d+(\.\d{1,8})?)$/.test(formData.longitude)) errors.push("Longitude format is invalid.");
+            }
         }
         if (formData.description && formData.description.length > 2000) errors.push("Description must be <2001 chars.");
         if (formData.org && formData.org.length > 255) errors.push("Org must be <256 chars.");
@@ -243,8 +244,10 @@ const FormModal = (props) => {
         formData2.append('link', serializedLink);
         formData2.append('link_text', '');
 
-        // Add location type and polygon data
-        formData2.append('location_type', locationType);
+        // Add location type and polygon data. A 'point' card whose coordinates were
+        // placed via the Add Points panel is stored as a multi-point card.
+        const effectiveLocationType = (locationType === 'point' && multiPoints.length >= 1) ? 'multipoint' : locationType;
+        formData2.append('location_type', effectiveLocationType);
         if ((locationType === 'polygon' && polygonVertices.length >= 3) || (locationType === 'image' && polygonVertices.length >= 4)) {
             if (locationType === 'image') {
                 // Image overlays use flat vertices (4 corners, no ring concept)
@@ -298,6 +301,11 @@ const FormModal = (props) => {
             }
             formData2.append('polygon_fill_color', polygonFillColor);
             formData2.append('polygon_line_style', polygonLineStyle);
+        }
+        if (effectiveLocationType === 'multipoint' && multiPoints.length > 0) {
+            formData2.append('multipoint_coordinates', JSON.stringify(
+                multiPoints.map(p => ({ lat: p.lat, lng: p.lng, icon: p.icon }))
+            ));
         }
 
         // append multiple files
@@ -362,108 +370,6 @@ const FormModal = (props) => {
         });
     };
 
-    const handleSelectLocation = useCallback(() => {
-        const map = window.atlasMapInstance;
-
-        if (!map) {
-            console.error("Map not found");
-            return;
-        }
-
-        // Hide the modal while selecting location
-        setIsSelectingLocation(true);
-        map.getCanvas().style.cursor = 'crosshair';
-
-        const onMapClick = (e) => {
-            const { lat, lng } = e.lngLat;
-
-            // Remove previous temp marker if any
-            if (selectLocationMarker.current) {
-                selectLocationMarker.current.remove();
-            }
-
-            // Create popup with confirm/cancel buttons
-            const popupContainer = document.createElement('div');
-            popupContainer.className = 'location-select-popup';
-            popupContainer.innerHTML = `
-                <div style="font-size:12px;margin-bottom:6px;color:#333;">
-                    ${lat.toFixed(6)}, ${lng.toFixed(6)}
-                </div>
-                <div style="display:flex;gap:6px;">
-                    <button class="location-select-confirm">OK</button>
-                    <button class="location-select-cancel">Cancel</button>
-                </div>
-            `;
-
-            const popup = new mapboxgl.Popup({
-                closeButton: false,
-                closeOnClick: false,
-                offset: 25,
-                className: 'location-select-mapbox-popup',
-            }).setDOMContent(popupContainer);
-
-            const marker = new mapboxgl.Marker({ color: "red" })
-                .setLngLat([lng, lat])
-                .setPopup(popup)
-                .addTo(map);
-
-            marker.togglePopup(); // open immediately
-            selectLocationMarker.current = marker;
-
-            // Confirm: fill form, close popup, show modal
-            popupContainer.querySelector('.location-select-confirm').addEventListener('click', () => {
-                setFormData((prevData) => ({
-                    ...prevData,
-                    latitude: lat.toFixed(6),
-                    longitude: lng.toFixed(6),
-                }));
-
-                if (shouldCloseOnPointCancelRef.current && typeof props.onPointLocationSelected === 'function') {
-                    props.onPointLocationSelected();
-                }
-
-                shouldCloseOnPointCancelRef.current = false;
-                marker.remove();
-                selectLocationMarker.current = null;
-                setIsSelectingLocation(false);
-                map.getCanvas().style.cursor = '';
-                map.off('click', onMapClick);
-            });
-
-            // Cancel: just remove marker, let user click again
-            popupContainer.querySelector('.location-select-cancel').addEventListener('click', () => {
-                marker.remove();
-                selectLocationMarker.current = null;
-            });
-        };
-
-        map.on('click', onMapClick);
-
-        // Store ref so we can clean up
-        selectLocationMarker.current = { _onMapClick: onMapClick, remove: () => {} };
-    }, []);
-
-    const cancelSelectLocation = () => {
-        const map = window.atlasMapInstance;
-        if (map) {
-            map.getCanvas().style.cursor = '';
-            if (selectLocationMarker.current) {
-                if (selectLocationMarker.current._onMapClick) {
-                    map.off('click', selectLocationMarker.current._onMapClick);
-                }
-                selectLocationMarker.current.remove();
-                selectLocationMarker.current = null;
-            }
-        }
-        setIsSelectingLocation(false);
-
-        // Point-tool launch from map toolbar: cancel without plotting should fully close create-card flow.
-        if (shouldCloseOnPointCancelRef.current) {
-            shouldCloseOnPointCancelRef.current = false;
-            handleCloseModal();
-        }
-    };
-
     const handleStartPolygonDraw = () => {
         setIsDrawingPolygon(true);
     };
@@ -509,33 +415,79 @@ const FormModal = (props) => {
         }
     };
 
+    const handleStartMultipointPlacement = () => {
+        if (!window.atlasMapInstance) {
+            console.error('Map not found');
+            return;
+        }
+        setIsPlacingMultipoint(true);
+    };
+
+    const handleMultipointSave = (points) => {
+        setMultiPoints(points);
+        setIsPlacingMultipoint(false);
+        if (points.length > 0) {
+            setFormData(prev => ({
+                ...prev,
+                latitude: Number(points[0].lat).toFixed(6),
+                longitude: Number(points[0].lng).toFixed(6),
+            }));
+        }
+        // Launched from the map "Coordinate" tool: notify parent the placement finished.
+        if (shouldCloseOnPointCancelRef.current) {
+            shouldCloseOnPointCancelRef.current = false;
+            if (typeof props.onPointLocationSelected === 'function') {
+                props.onPointLocationSelected();
+            }
+        }
+    };
+
+    const handleMultipointCancel = () => {
+        setIsPlacingMultipoint(false);
+        // Cancelling the map-tool launch with no points should close the whole flow.
+        if (shouldCloseOnPointCancelRef.current) {
+            shouldCloseOnPointCancelRef.current = false;
+            handleCloseModal();
+        }
+    };
+
     useEffect(() => {
         const signal = props.initialPointToolSignal;
         if (!signal || signal === lastPointToolSignalRef.current) return;
-        if (isSelectingLocation || isDrawingPolygon) return;
+        if (isPlacingMultipoint || isDrawingPolygon) return;
 
         lastPointToolSignalRef.current = signal;
         shouldCloseOnPointCancelRef.current = true;
         setLocationType('point');
         setPolygonVertices([]);
-        handleSelectLocation();
-    }, [props.initialPointToolSignal, isSelectingLocation, isDrawingPolygon, handleSelectLocation]);
+        setMultiPoints([]);
+        setIsPlacingMultipoint(true);
+    }, [props.initialPointToolSignal, isPlacingMultipoint, isDrawingPolygon]);
 
     return (
         <div>
-            {/* Floating hint when selecting location */}
-            {isSelectingLocation && (
-                <div className="location-select-hint">
-                    <span>Click on the map to select a location</span>
-                    <button type="button" onClick={cancelSelectLocation}>Cancel</button>
-                </div>
-            )}
-
             {/* Polygon drawing flow */}
             {isDrawingPolygon && (
                 <PolygonDrawingModal
                     onSave={handlePolygonSave}
                     onCancel={handlePolygonCancel}
+                />
+            )}
+
+            {/* Coordinate placement flow (one or many points) */}
+            {isPlacingMultipoint && (
+                <CoordinatesPanel
+                    initialPoints={
+                        multiPoints.length > 0
+                            ? multiPoints
+                            : (() => {
+                                const lat = parseFloat(formData.latitude);
+                                const lng = parseFloat(formData.longitude);
+                                return (!isNaN(lat) && !isNaN(lng)) ? [{ lat, lng }] : [];
+                            })()
+                    }
+                    onSave={handleMultipointSave}
+                    onCancel={handleMultipointCancel}
                 />
             )}
 
@@ -665,33 +617,40 @@ const FormModal = (props) => {
 
                     {locationType === 'point' && (
                         <div className="form-modal-location-content form-modal-location-content--point">
-                            <p className="form-modal-location-description">Use one latitude/longitude point to pin this card at a single location.</p>
-                            <button type="button" className="location_button" onClick={handleSelectLocation}>
-                                Select a Location
+                            <p className="form-modal-location-description">Pin this card at one or more coordinate points. Add points on the map, fine-tune each by latitude/longitude, and choose an icon per point.</p>
+                            <button type="button" className="location_button" onClick={handleStartMultipointPlacement}>
+                                {multiPoints.length > 0 ? 'Edit Points on Map' : 'Add Points on Map'}
                             </button>
 
-                            <div className="form-modal-lat-lng-row">
-                                <div className="form-modal-lat-lng-field">
-                                    <label>Latitude <span className="form-modal-required-star">*</span>:</label>
-                                    <input
-                                        type="text"
-                                        name="latitude"
-                                        value={formData.latitude}
-                                        onChange={handleInputChange}
-                                        required
-                                    />
+                            {multiPoints.length > 0 ? (
+                                <div className="form-modal-polygon-summary">
+                                    <span className="form-modal-polygon-check">&#10003;</span>
+                                    {multiPoints.length} point{multiPoints.length > 1 ? 's' : ''} added
                                 </div>
-                                <div className="form-modal-lat-lng-field">
-                                    <label>Longitude <span className="form-modal-required-star">*</span>:</label>
-                                    <input
-                                        type="text"
-                                        name="longitude"
-                                        value={formData.longitude}
-                                        onChange={handleInputChange}
-                                        required
-                                    />
+                            ) : (
+                                <div className="form-modal-lat-lng-row">
+                                    <div className="form-modal-lat-lng-field">
+                                        <label>Latitude <span className="form-modal-required-star">*</span>:</label>
+                                        <input
+                                            type="text"
+                                            name="latitude"
+                                            value={formData.latitude}
+                                            onChange={handleInputChange}
+                                            required
+                                        />
+                                    </div>
+                                    <div className="form-modal-lat-lng-field">
+                                        <label>Longitude <span className="form-modal-required-star">*</span>:</label>
+                                        <input
+                                            type="text"
+                                            name="longitude"
+                                            value={formData.longitude}
+                                            onChange={handleInputChange}
+                                            required
+                                        />
+                                    </div>
                                 </div>
-                            </div>
+                            )}
                         </div>
                     )}
 

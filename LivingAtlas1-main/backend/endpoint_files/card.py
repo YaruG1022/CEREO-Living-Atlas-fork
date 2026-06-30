@@ -484,6 +484,7 @@ async def upload_form(
     polygon_fill_color: Optional[str] = Form(None),
     polygon_fill_opacity: Optional[str] = Form(None),
     polygon_line_style: Optional[str] = Form(None),
+    multipoint_coordinates: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
     funding: Optional[str] = Form(None),
     org: Optional[str] = Form(None),
@@ -742,6 +743,40 @@ async def upload_form(
                 print(f"[DB] Polygon vertices inserted: {total_inserted} points in {len(rings)} ring(s), fillColor={polygon_fill_color}, lineStyle={polygon_line_style}")
             except json.JSONDecodeError:
                 raise HTTPException(status_code=400, detail="Invalid polygon_coordinates JSON format")
+
+        # --------------------------------------------------
+        # Handle multi-point cards (multiple markers, optional per-point icon)
+        # --------------------------------------------------
+        if location_type == "multipoint" and multipoint_coordinates:
+            try:
+                parsed_points = json.loads(multipoint_coordinates)
+            except json.JSONDecodeError:
+                raise HTTPException(status_code=400, detail="Invalid multipoint_coordinates JSON format")
+
+            if isinstance(parsed_points, dict) and isinstance(parsed_points.get("points"), list):
+                parsed_points = parsed_points["points"]
+            if not isinstance(parsed_points, list) or len(parsed_points) < 1:
+                raise HTTPException(status_code=400, detail="Multi-point card must have at least one point")
+
+            mp_inserted = 0
+            for point_order, point in enumerate(parsed_points):
+                p_lat = float(point["lat"])
+                p_lng = float(point["lng"])
+                if not (-90 <= p_lat <= 90) or not (-180 <= p_lng <= 180):
+                    raise HTTPException(status_code=400, detail=f"Point {point_order} has invalid coordinates")
+                p_icon = point.get("icon") if isinstance(point, dict) else None
+                if isinstance(p_icon, str):
+                    p_icon = p_icon[:60]
+                cur.execute(
+                    """
+                    INSERT INTO CardPolygonVertices
+                        (CardID, RingIndex, VertexOrder, Latitude, Longitude, Icon)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (nextcardid, 0, point_order, p_lat, p_lng, p_icon)
+                )
+                mp_inserted += 1
+            print(f"[DB] Multi-point markers inserted: {mp_inserted} points")
 
         print("[DB] Card record inserted/updated")
         enable_commits = True
