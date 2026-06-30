@@ -161,7 +161,7 @@
     position: fixed;
     left: var(--app-left-sidebar-collapsed-width);          /* flush against the right edge of the sidebar */
     top: var(--app-navbar-height);           /* flush below the topnav */
-    z-index: 999;        /* below sidebar (1000) so it slides from behind it */
+    z-index: 1250;       /* above other side panels (1200) so it is never covered */
     background: linear-gradient(180deg, #f4f6f9 0%, #eceff4 100%);
     box-shadow: 10px 0 24px rgba(16, 33, 54, 0.18);
     border-radius: 0 10px 10px 0;
@@ -322,6 +322,108 @@
 .search-mini-result-item:hover {
     background: #f2f7fc;
     border-color: #8eabc8;
+}
+
+/* Recently used section */
+.search-mini-recent {
+    margin-top: 10px;
+    border-top: 1px solid #d8e1ea;
+    padding-top: 8px;
+}
+
+.search-mini-recent-title {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #60758b;
+    padding: 0 2px 6px;
+}
+
+.search-mini-recent-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.search-mini-recent-item {
+    display: flex;
+    align-items: stretch;
+    border: 1px solid #d8e1ea;
+    border-radius: 6px;
+    background: #ffffff;
+    overflow: hidden;
+}
+
+.search-mini-recent-item:hover {
+    border-color: #8eabc8;
+}
+
+.search-mini-recent-item--pinned {
+    background: #f6faff;
+    border-color: #b9d0e6;
+}
+
+.search-mini-recent-run {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    border: none;
+    background: transparent;
+    color: #223244;
+    text-align: left;
+    font-size: 13px;
+    padding: 8px 10px;
+    cursor: pointer;
+}
+
+.search-mini-recent-run:hover {
+    background: #f2f7fc;
+}
+
+.search-mini-recent-pin-indicator {
+    color: #2f6fb0;
+    font-size: 11px;
+    flex: 0 0 auto;
+}
+
+.search-mini-recent-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.search-mini-recent-actions {
+    display: flex;
+    align-items: stretch;
+    flex: 0 0 auto;
+    border-left: 1px solid #e1e8f0;
+}
+
+.search-mini-recent-action {
+    border: none;
+    background: transparent;
+    color: #7f93a8;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.search-mini-recent-action:hover {
+    background: #eef4fb;
+    color: #1f3852;
+}
+
+.search-mini-recent-action--active {
+    color: #2f6fb0;
 }
 
 .home-container :is(button, a).feature-search-hit {

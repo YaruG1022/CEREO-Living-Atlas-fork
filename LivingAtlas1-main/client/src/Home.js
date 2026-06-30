@@ -6,6 +6,7 @@ import Content1 from './Content1';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSearch } from '@fortawesome/free-solid-svg-icons';
 import { faTimes } from '@fortawesome/free-solid-svg-icons';
+import { faThumbtack } from '@fortawesome/free-solid-svg-icons';
 import { faAngleDoubleLeft, faAngleDoubleRight } from '@fortawesome/free-solid-svg-icons';
 import { faClone } from '@fortawesome/free-solid-svg-icons';
 import './Home.css';
@@ -187,6 +188,19 @@ function Home(props) {
 
     const [miniSearchTerm, setMiniSearchTerm] = useState('');
     const [miniFeatureResults, setMiniFeatureResults] = useState([]);
+    const [recentFeatures, setRecentFeatures] = useState(() => {
+        try {
+            const raw = localStorage.getItem('search_panel_recent_features_v1');
+            if (!raw) return [];
+            const parsed = JSON.parse(raw);
+            if (!Array.isArray(parsed)) return [];
+            return parsed
+                .filter(f => f && typeof f.id === 'string' && typeof f.label === 'string')
+                .map(f => ({ id: f.id, label: f.label, pinned: !!f.pinned }));
+        } catch {
+            return [];
+        }
+    });
     const miniSearchInputRef = useRef(null);
     const isSearchModalOpenRef = useRef(false);
     const searchPanelOpenedByOnboardingRef = useRef(false);
@@ -202,6 +216,14 @@ function Home(props) {
             miniSearchInputRef.current.focus();
         }
     }, [isSearchModalOpen]);
+
+    useEffect(() => {
+        try {
+            localStorage.setItem('search_panel_recent_features_v1', JSON.stringify(recentFeatures));
+        } catch {
+            /* ignore persistence errors (e.g. storage disabled) */
+        }
+    }, [recentFeatures]);
 
     useEffect(() => {
         const handler = (event) => {
@@ -809,6 +831,55 @@ function Home(props) {
     const handleFeatureResultClick = (feature) => {
         if (!feature || typeof feature.action !== 'function') return;
         feature.action();
+        addRecentFeature(feature);
+        setIsSearchModalOpen(false);
+    };
+
+    const addRecentFeature = (feature) => {
+        if (!feature || !feature.id || !feature.label) return;
+        setRecentFeatures(prev => {
+            const existing = prev.find(f => f.id === feature.id);
+            const pinned = existing ? existing.pinned : false;
+            const rest = prev.filter(f => f.id !== feature.id);
+            const entry = { id: feature.id, label: feature.label, pinned };
+            const ordered = pinned
+                ? [entry, ...rest]
+                : [...rest.filter(f => f.pinned), entry, ...rest.filter(f => !f.pinned)];
+            // Cap unpinned entries; pinned items are always kept.
+            let unpinnedCount = 0;
+            return ordered.filter(f => {
+                if (f.pinned) return true;
+                unpinnedCount += 1;
+                return unpinnedCount <= 10;
+            });
+        });
+    };
+
+    const togglePinRecentFeature = (id) => {
+        setRecentFeatures(prev => {
+            const target = prev.find(f => f.id === id);
+            if (!target) return prev;
+            const rest = prev.filter(f => f.id !== id);
+            const entry = { ...target, pinned: !target.pinned };
+            return entry.pinned
+                ? [entry, ...rest]
+                : [...rest.filter(f => f.pinned), entry, ...rest.filter(f => !f.pinned)];
+        });
+    };
+
+    const removeRecentFeature = (id) => {
+        setRecentFeatures(prev => prev.filter(f => f.id !== id));
+    };
+
+    const runRecentFeature = (id) => {
+        const feature = getFeatureCatalog().find(f => f.id === id);
+        if (!feature || typeof feature.action !== 'function') {
+            // Stale entry no longer in the catalog – drop it.
+            removeRecentFeature(id);
+            return;
+        }
+        feature.action();
+        addRecentFeature(feature);
         setIsSearchModalOpen(false);
     };
 
@@ -1285,6 +1356,9 @@ function Home(props) {
                     </button>
                 </form>
                 <div className="search-mini-results" aria-live="polite">
+                    {!miniSearchTerm.trim() && (
+                        <div className="search-mini-results-empty">Search features by keywords.</div>
+                    )}
                     {!!miniSearchTerm.trim() && miniFeatureResults.length === 0 && (
                         <div className="search-mini-results-empty">No features matched this keyword.</div>
                     )}
@@ -1299,6 +1373,54 @@ function Home(props) {
                         </button>
                     ))}
                 </div>
+                {recentFeatures.length > 0 && (
+                    <div className="search-mini-recent">
+                        <div className="search-mini-recent-title">Recently used</div>
+                        <div className="search-mini-recent-list">
+                            {recentFeatures.map((item) => (
+                                <div
+                                    key={item.id}
+                                    className={`search-mini-recent-item${item.pinned ? ' search-mini-recent-item--pinned' : ''}`}
+                                >
+                                    <button
+                                        type="button"
+                                        className="search-mini-recent-run"
+                                        onClick={() => runRecentFeature(item.id)}
+                                        title={item.label}
+                                    >
+                                        {item.pinned && (
+                                            <FontAwesomeIcon
+                                                icon={faThumbtack}
+                                                className="search-mini-recent-pin-indicator"
+                                            />
+                                        )}
+                                        <span className="search-mini-recent-label">{item.label}</span>
+                                    </button>
+                                    <div className="search-mini-recent-actions">
+                                        <button
+                                            type="button"
+                                            className={`search-mini-recent-action${item.pinned ? ' search-mini-recent-action--active' : ''}`}
+                                            onClick={() => togglePinRecentFeature(item.id)}
+                                            title={item.pinned ? 'Unpin' : 'Pin to top'}
+                                            aria-label={item.pinned ? 'Unpin' : 'Pin to top'}
+                                        >
+                                            <FontAwesomeIcon icon={faThumbtack} />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="search-mini-recent-action"
+                                            onClick={() => removeRecentFeature(item.id)}
+                                            title="Remove"
+                                            aria-label="Remove"
+                                        >
+                                            <FontAwesomeIcon icon={faTimes} />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Main Map + Right Sidebar */}
