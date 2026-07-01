@@ -34,6 +34,7 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
     const [openIconPicker, setOpenIconPicker] = useState(null); // index whose picker is open
 
     const markersRef = useRef([]);
+    const panelRef = useRef(null);
 
     const addPoint = useCallback((lat, lng) => {
         setPoints(prev => [
@@ -102,6 +103,26 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
         markersRef.current = [];
     }, []);
 
+    // Align the panel's top with the "Add card from map" map control button so it
+    // sits at the same height as the button that launches this flow (the button is
+    // pushed down by the search control stacked above it, so top:10px looks too high).
+    useEffect(() => {
+        const map = window.atlasMapInstance;
+        const panel = panelRef.current;
+        if (!map || !panel) return undefined;
+        const container = map.getContainer();
+
+        const alignTop = () => {
+            const btn = container.querySelector('.map-add-tools-btn');
+            if (!btn) return;
+            const top = btn.getBoundingClientRect().top - container.getBoundingClientRect().top;
+            if (top > 0) panel.style.top = `${top}px`;
+        };
+
+        const raf = requestAnimationFrame(alignTop);
+        return () => cancelAnimationFrame(raf);
+    }, []);
+
     const handleLatChange = (index, value) => {
         const num = parseFloat(value);
         updatePoint(index, { lat: isNaN(num) ? value : round6(num) });
@@ -126,7 +147,7 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
     if (!mapContainer) return null;
 
     return ReactDOM.createPortal(
-        <div className="polygon-draw-modal coordinates-panel">
+        <div className="polygon-draw-modal coordinates-panel" ref={panelRef}>
             <div className="polygon-draw-modal-header">
                 <h3>Add Points</h3>
                 <span className="polygon-draw-modal-hint">Click on the map to add points</span>
