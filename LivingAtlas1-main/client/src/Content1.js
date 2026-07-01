@@ -702,6 +702,11 @@ const Content1 = (props) => {
     let isActive = true;
     let markersFetchInFlight = false;
     let preventGenericClickClose = false;
+    // Tracks delegated map event handlers for card-polygon/image layers so they can
+    // be detached before re-registering on each render. Without this, every re-render
+    // (e.g. after uploading a card) stacks another click listener on the same layer,
+    // and the extra listener immediately toggles the just-opened popup shut.
+    const cardPolygonEventHandlers = new Map();
 
     const map = new mapboxgl.Map({
       container: mapContainerRef.current,
@@ -1148,6 +1153,15 @@ const Content1 = (props) => {
     };
 
     const renderCardPolygons = (markersData, mapInstance) => {
+      // Detach previously registered delegated listeners to avoid stacking duplicate
+      // handlers across re-renders (duplicates would toggle the popup closed on click).
+      cardPolygonEventHandlers.forEach(({ layerId, click, enter, leave }) => {
+        mapInstance.off('click', layerId, click);
+        mapInstance.off('mouseenter', layerId, enter);
+        mapInstance.off('mouseleave', layerId, leave);
+      });
+      cardPolygonEventHandlers.clear();
+
       // Remove existing overlay layers/sources
       markersData.forEach(feature => {
         const sourceId = `card-polygon-${feature.cardID}`;
@@ -1160,7 +1174,11 @@ const Content1 = (props) => {
         const imageOutlineSourceId = `card-image-outline-source-${feature.cardID}`;
         const imageOutlineLayerId = `card-image-outline-${feature.cardID}`;
         if (mapInstance.getLayer(fillLayerId)) mapInstance.removeLayer(fillLayerId);
-        if (mapInstance.getLayer(lineLayerId)) mapInstance.removeLayer(lineLayerId);
+        // Remove the legacy single line layer and every per-style line layer.
+        ['', '-solid', '-dashed', '-dotted', '-dashdot'].forEach(suffix => {
+          const styleLineId = `${lineLayerId}${suffix}`;
+          if (mapInstance.getLayer(styleLineId)) mapInstance.removeLayer(styleLineId);
+        });
         if (mapInstance.getSource(sourceId)) mapInstance.removeSource(sourceId);
         if (mapInstance.getLayer(imageHitLayerId)) mapInstance.removeLayer(imageHitLayerId);
         if (mapInstance.getLayer(imageLayerId)) mapInstance.removeLayer(imageLayerId);
@@ -1226,6 +1244,9 @@ const Content1 = (props) => {
 
           mapInstance.addSource(sourceId, {
             type: 'geojson',
+            // Disable geometry simplification so small polygon borders don't collapse
+            // (and become invisible) at certain zoom levels (e.g. 6 < zoom < 7).
+            tolerance: 0,
             data: {
               type: 'FeatureCollection',
               features: ringFeatures
@@ -1242,25 +1263,35 @@ const Content1 = (props) => {
             }
           });
 
-          mapInstance.addLayer({
-            id: lineLayerId,
-            type: 'line',
-            source: sourceId,
-            paint: {
+          // Render borders with one line layer per line-style. A data-driven
+          // ['match', ['get','lineStyle'], ...] on line-dasharray is unreliable and
+          // makes some borders disappear at certain zoom levels (and even routes
+          // solid lines through the dashed-line renderer via an empty array). Using
+          // static per-style layers — with no dash array for solid — renders reliably.
+          const stylesPresent = new Set(
+            ringFeatures.map(rf => rf.properties.lineStyle || 'solid')
+          );
+          stylesPresent.forEach(styleKey => {
+            const dash = LINE_STYLE_DASH[styleKey] || LINE_STYLE_DASH.solid;
+            const paint = {
               'line-color': ['coalesce', ['get', 'fillColor'], fillColor],
               'line-width': 2,
-              'line-dasharray': [
-                'match',
-                ['coalesce', ['get', 'lineStyle'], 'solid'],
-                'dashed', ['literal', LINE_STYLE_DASH.dashed],
-                'dotted', ['literal', LINE_STYLE_DASH.dotted],
-                'dashdot', ['literal', LINE_STYLE_DASH.dashdot],
-                ['literal', LINE_STYLE_DASH.solid],
-              ]
+            };
+            // Solid borders must use the default (dashless) line renderer so they
+            // never drop out at low zoom; only non-solid styles get a dash array.
+            if (styleKey !== 'solid' && dash.length > 0) {
+              paint['line-dasharray'] = dash;
             }
+            mapInstance.addLayer({
+              id: `${lineLayerId}-${styleKey}`,
+              type: 'line',
+              source: sourceId,
+              filter: ['==', ['coalesce', ['get', 'lineStyle'], 'solid'], styleKey],
+              paint,
+            });
           });
 
-          mapInstance.on('click', fillLayerId, (e) => {
+          const polygonClickHandler = (e) => {
             e.originalEvent.stopPropagation();
             preventGenericClickClose = true;
             if (markerPopupRef.current && openMarkerIdRef.current === feature.cardID) {
@@ -1270,13 +1301,21 @@ const Content1 = (props) => {
             marker_clicked = true;
             setSearchCondition(feature.title);
             openMarkerPopup(feature, e.lngLat, mapInstance);
-          });
-
-          mapInstance.on('mouseenter', fillLayerId, () => {
+          };
+          const polygonEnterHandler = () => {
             mapInstance.getCanvas().style.cursor = 'pointer';
-          });
-          mapInstance.on('mouseleave', fillLayerId, () => {
+          };
+          const polygonLeaveHandler = () => {
             mapInstance.getCanvas().style.cursor = '';
+          };
+          mapInstance.on('click', fillLayerId, polygonClickHandler);
+          mapInstance.on('mouseenter', fillLayerId, polygonEnterHandler);
+          mapInstance.on('mouseleave', fillLayerId, polygonLeaveHandler);
+          cardPolygonEventHandlers.set(fillLayerId, {
+            layerId: fillLayerId,
+            click: polygonClickHandler,
+            enter: polygonEnterHandler,
+            leave: polygonLeaveHandler,
           });
           continue;
         }
@@ -1315,7 +1354,7 @@ const Content1 = (props) => {
           }
         });
 
-        mapInstance.on('click', imageHitLayerId, (e) => {
+        const imageClickHandler = (e) => {
           e.originalEvent.stopPropagation();
           preventGenericClickClose = true;
           if (markerPopupRef.current && openMarkerIdRef.current === feature.cardID) {
@@ -1325,13 +1364,21 @@ const Content1 = (props) => {
           marker_clicked = true;
           setSearchCondition(feature.title);
           openMarkerPopup(feature, e.lngLat, mapInstance);
-        });
-
-        mapInstance.on('mouseenter', imageHitLayerId, () => {
+        };
+        const imageEnterHandler = () => {
           mapInstance.getCanvas().style.cursor = 'pointer';
-        });
-        mapInstance.on('mouseleave', imageHitLayerId, () => {
+        };
+        const imageLeaveHandler = () => {
           mapInstance.getCanvas().style.cursor = '';
+        };
+        mapInstance.on('click', imageHitLayerId, imageClickHandler);
+        mapInstance.on('mouseenter', imageHitLayerId, imageEnterHandler);
+        mapInstance.on('mouseleave', imageHitLayerId, imageLeaveHandler);
+        cardPolygonEventHandlers.set(imageHitLayerId, {
+          layerId: imageHitLayerId,
+          click: imageClickHandler,
+          enter: imageEnterHandler,
+          leave: imageLeaveHandler,
         });
 
         (async () => {
