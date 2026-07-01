@@ -1,11 +1,10 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import mapboxgl from 'mapbox-gl';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
     MARKER_ICON_OPTIONS,
     DEFAULT_MARKER_ICON_KEY,
-    getMarkerIconDef,
+    MarkerIconGlyph,
     buildMarkerIconElement,
     MARKER_ICON_COLOR,
 } from './markerIcons';
@@ -189,7 +188,7 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
                                     title="Choose icon"
                                     onClick={() => setOpenIconPicker(openIconPicker === index ? null : index)}
                                 >
-                                    <FontAwesomeIcon icon={getMarkerIconDef(p.icon)} />
+                                    <MarkerIconGlyph optionKey={p.icon} />
                                 </button>
                             </div>
 
@@ -216,7 +215,7 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
                                             setOpenIconPicker(null);
                                         }}
                                     >
-                                        <FontAwesomeIcon icon={opt.icon} />
+                                        <MarkerIconGlyph optionKey={opt.key} />
                                     </button>
                                 ))}
                             </div>

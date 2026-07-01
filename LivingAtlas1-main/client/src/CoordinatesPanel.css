@@ -20,7 +20,7 @@
     border: 1px solid #ccc;
     border-radius: 3px;
     background: #fafafa;
-    color: #d9381e;
+    color: #333;
     cursor: pointer;
     padding: 0;
     font-size: 11px;
@@ -66,10 +66,18 @@
     background: rgba(0, 0, 0, .06);
 }
 
+/* Selected option: keep the glyph identical to the unselected state and show the
+   selection only as a border on the option in the icon menu. */
 .coordinates-panel-icon-option.active {
-    border-color: #d9381e;
-    color: #d9381e;
-    background: #fdecea;
+    border-color: #2563eb;
+}
+
+/* Glyph image used for image-based markers inside the picker button and grid. */
+.marker-icon-glyph-img {
+    height: 16px;
+    width: auto;
+    object-fit: contain;
+    display: block;
 }
 
 /* On-map marker element built by buildMarkerIconElement(). */
@@ -86,5 +94,16 @@
 .multipoint-map-marker svg {
     width: 1em;
     height: 1em;
+    display: block;
+}
+
+/* Image-based on-map markers (colored pins) render an <img> instead of an SVG. */
+.multipoint-map-marker--image {
+    font-size: 0;
+}
+
+.multipoint-map-marker--image img {
+    width: auto;
+    height: 34px;
     display: block;
 }
