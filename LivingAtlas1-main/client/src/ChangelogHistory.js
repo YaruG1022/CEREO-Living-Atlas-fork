@@ -26,17 +26,37 @@ function ChangelogHistory() {
             <div className="changelog-history-body">
                 {activeTab === 'latest' && (
                     <>
-                        <h3>Update Date: 6/21/2026</h3>
-                        <p>Fixed polygon color display: a card represented by multiple polygons with different colors now keeps each polygon's own color after saving, instead of all polygons collapsing to a single color.</p>
-                        <p>Removed the zoom-to-location behavior when selecting a polygon while editing; the selected polygon now shows a soft drop-shadow highlight instead.</p>
-                        <p>Added an RGB color picker to the color options in the Draw Polygon modal, letting users pick custom colors in addition to the preset quick-select swatches.</p>
-                        <hr />
+                        <h3>Update Date: 6/16 - 6/30/2026</h3>
 
-                        <h3>Update Date: 6/17/2026</h3>
+                        <h4>Chatbot Knowledge Base Expansion</h4>
+                        <p>Added knowledge about the Living Atlas application itself to the chatbot.</p>
+                        <p>Added knowledge base content covering the Washington State ArcGIS, Idaho ArcGIS, and Oregon ArcGIS data sources (sourced from the state Department of Ecology and related agencies), as well as the map's built-in layers.</p>
+                        <p>Added knowledge base content for all cards currently in the database, letting the chatbot query card data — while keeping sensitive information (such as usernames and passwords) out of its responses.</p>
+
+                        <h4>Search Panel Improvements</h4>
+                        <p>Raised the Search panel (the first button in the left sidebar) above the other panels in stacking order.</p>
+                        <p>Added placeholder hint text in the results area when no results are shown (e.g. "Search features by keywords").</p>
+                        <p>Added a Recently Used section below the results area that lists options the user has searched and used; each option can be removed from the list or pinned to the top.</p>
+
+                        <h4>Add Card from Map – Coordinates</h4>
+                        <p>Streamlined the point-adding workflow with a new Add Points panel for the Coordinates option.</p>
+                        <p>Points can now be repositioned by typing X/Y coordinate values while adding, and each coordinate point can use a different icon shape.</p>
+                        <p>Added support for multiple points to represent a single card, shown together in the panel's point display area.</p>
+
+                        <h4>Bug Fixes</h4>
+                        <p>Fixed the Add Points panel position offset, and fixed the mismatch between the shapes shown on the map and the preview after adding a card with multiple points.</p>
+                        <p>Changed the default appearance of the coordinate preview in the Add Points panel, and added the original three default markers to the icon menu.</p>
+                        <p>Fixed an issue where clicking any shape of a multi-polygon card failed to open its embedded map popup.</p>
+                        <p>Fixed an issue where polygon borders were invisible at certain zoom levels when multiple polygons represent a single card.</p>
                         <p>Fixed multi-polygon rendering: vertices from separate polygon rings were previously cross-connected into one tangled shape; each polygon now renders independently.</p>
                         <p>Fixed per-polygon style isolation in the Draw Polygon modal: color, opacity, and line style changes now apply only to the selected polygon, not all polygons.</p>
                         <p>Fixed duplicate vertex list display in the Draw Polygon modal: clicking a polygon to edit it no longer shows its points a second time below the polygon list.</p>
-                        <p>Added visibility (Public / Private) option to the Add Card modal, matching the existing setting in the Learn More edit modal.</p>
+                        <p>Fixed polygon color display: a card represented by multiple polygons with different colors now keeps each polygon's own color after saving, instead of all polygons collapsing to a single color.</p>
+
+                        <h4>Other Improvements</h4>
+                        <p>Removed the zoom-to-location behavior when selecting a polygon while editing; the selected polygon now shows a soft drop-shadow highlight instead.</p>
+                        <p>Added an RGB color picker to the color options in the Draw Polygon modal, letting users pick custom colors in addition to the preset quick-select swatches.</p>
+                        <p>Added a Public / Private visibility option to the Add Card modal, matching the existing setting in the Learn More edit modal.</p>
                         <hr />
 
                         <h3>Update Date: 6/12/2026</h3>
