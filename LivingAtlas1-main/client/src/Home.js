@@ -73,7 +73,8 @@ function Home(props) {
     const [arcgisLayers, setArcgisLayers] = useState([]);
     const [arcgisLegend, setArcgisLegend] = useState(null);
     const [arcgisLayerAdded, setArcgisLayerAdded] = useState(false);
-    const [isChangelogOpen, setIsChangelogOpen] = useState(() => {
+    const [isChangelogOpen, setIsChangelogOpen] = useState(false);
+    const [hasUnseenChangelog, setHasUnseenChangelog] = useState(() => {
         return !localStorage.getItem('changelog_seen_v17');
     });
     const [isGeneralOnboardingOpen, setIsGeneralOnboardingOpen] = useState(false);
@@ -84,6 +85,7 @@ function Home(props) {
 
     const closeChangelog = () => {
         localStorage.setItem('changelog_seen_v17', 'true');
+        setHasUnseenChangelog(false);
         setIsChangelogOpen(false);
     };
 
@@ -102,17 +104,13 @@ function Home(props) {
 
     useEffect(() => {
         if (hasAutoStartedGeneralOnboardingRef.current) return;
-        if (isChangelogOpen || isGeneralOnboardingOpen || isGeneralOnboardingTourOpen) return;
-
-        if (localStorage.getItem(GENERAL_ONBOARDING_SEEN_KEY)) {
-            hasAutoStartedGeneralOnboardingRef.current = true;
-            return;
-        }
-
         hasAutoStartedGeneralOnboardingRef.current = true;
+
+        if (localStorage.getItem(GENERAL_ONBOARDING_SEEN_KEY)) return;
+
         localStorage.setItem(GENERAL_ONBOARDING_SEEN_KEY, 'true');
-        setIsGeneralOnboardingTourOpen(true);
-    }, [isChangelogOpen, isGeneralOnboardingOpen, isGeneralOnboardingTourOpen]);
+        setIsGeneralOnboardingOpen(true);
+    }, []);
 
     useEffect(() => {
         const previousOverflow = document.body.style.overflow;
@@ -1296,6 +1294,7 @@ function Home(props) {
                     title="What's new"
                 >
                     <FontAwesomeIcon icon={faBell} />
+                    {hasUnseenChangelog && <span className="changelog-notification-dot" />}
                 </button>
 
                 <button

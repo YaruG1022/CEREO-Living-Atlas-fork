@@ -532,6 +532,19 @@
 
 .left-sidebar-changelog-button {
     margin-bottom: 8px;
+    position: relative;
+}
+
+/* Red dot on the bell icon when there are unseen updates */
+.changelog-notification-dot {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #e74c3c;
+    pointer-events: none;
 }
 
 .left-sidebar-onboarding-button {

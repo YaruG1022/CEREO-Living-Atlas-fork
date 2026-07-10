@@ -286,6 +286,18 @@
     line-height: 1.55;
 }
 
+.onboarding-modal-body ul {
+    margin: 4px 0;
+    padding-left: 20px;
+}
+
+.onboarding-modal-body li {
+    font-size: 14px;
+    color: #333;
+    margin: 4px 0;
+    line-height: 1.55;
+}
+
 .onboarding-modal-footer {
     padding: 12px 22px 18px;
     display: flex;
