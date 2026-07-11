@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import mapboxgl from 'mapbox-gl';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faHand, faRotate, faUpRightAndDownLeftFromCenter, faRotateLeft, faRotateRight, faTrash, faPalette } from '@fortawesome/free-solid-svg-icons';
+import { faHand, faRotate, faUpRightAndDownLeftFromCenter, faRotateLeft, faRotateRight, faTrash, faPalette, faPlus } from '@fortawesome/free-solid-svg-icons';
 import { HexColorPicker } from 'react-colorful';
 import {
     MARKER_ICON_OPTIONS,
@@ -59,8 +59,9 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
     const [showColorMenu, setShowColorMenu] = useState(false);
     const [showOpacityMenu, setShowOpacityMenu] = useState(false);
 
-    // Transform modes (mutually exclusive): 'move' | 'rotate' | 'scale' | null
-    const [transformMode, setTransformMode] = useState(null);
+    // Active tool mode (mutually exclusive): 'add' | 'move' | 'rotate' | 'scale' | null.
+    // Points can only be added by clicking the map while 'add' is active.
+    const [activeMode, setActiveMode] = useState('add');
 
     // Undo / redo stacks of { points, color, opacity }
     const [history, setHistory] = useState([]);
@@ -76,8 +77,8 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
     markerColorRef.current = markerColor;
     const markerOpacityRef = useRef(markerOpacity);
     markerOpacityRef.current = markerOpacity;
-    const transformModeRef = useRef(transformMode);
-    transformModeRef.current = transformMode;
+    const activeModeRef = useRef(activeMode);
+    activeModeRef.current = activeMode;
     const transformDragRef = useRef(null); // in-progress transform drag state
     const handleUndoRef = useRef(null);
     const handleRedoRef = useRef(null);
@@ -112,14 +113,14 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
         setOpenIconPicker(null);
     }, []);
 
-    // Attach map click-to-add handler for the lifetime of the panel.
+    // Attach map click-to-add handler for the lifetime of the panel; it only
+    // adds points while the "Add Points" tool is active.
     useEffect(() => {
         const map = window.atlasMapInstance;
         if (!map) return undefined;
 
-        map.getCanvas().style.cursor = 'crosshair';
         const handleMapClick = (e) => {
-            if (transformModeRef.current) return; // ignore clicks while transforming
+            if (activeModeRef.current !== 'add') return;
             const { lat, lng } = e.lngLat;
             addPoint(lat, lng);
         };
@@ -127,9 +128,18 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
 
         return () => {
             map.off('click', handleMapClick);
-            map.getCanvas().style.cursor = '';
         };
     }, [addPoint]);
+
+    // Crosshair cursor while the "Add Points" tool is active.
+    useEffect(() => {
+        const map = window.atlasMapInstance;
+        if (!map || activeMode !== 'add') return undefined;
+        map.getCanvas().style.cursor = 'crosshair';
+        return () => {
+            map.getCanvas().style.cursor = '';
+        };
+    }, [activeMode]);
 
     // Keep the on-map markers in sync with the points list and marker style.
     useEffect(() => {
@@ -148,7 +158,8 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
             }
             const el = buildMarkerIconElement(p.icon, markerColor);
             el.style.opacity = markerOpacity;
-            const marker = new mapboxgl.Marker({ element: el, draggable: !transformMode, anchor: 'bottom' })
+            const isTransforming = activeMode && activeMode !== 'add';
+            const marker = new mapboxgl.Marker({ element: el, draggable: !isTransforming, anchor: 'bottom' })
                 .setLngLat([lng, lat])
                 .addTo(map);
             marker.on('dragstart', () => {
@@ -160,7 +171,7 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
             });
             markersRef.current.push(marker);
         });
-    }, [points, updatePoint, markerColor, markerOpacity, transformMode]);
+    }, [points, updatePoint, markerColor, markerOpacity, activeMode]);
 
     // Clean up all markers when the panel unmounts.
     useEffect(() => () => {
@@ -224,7 +235,8 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
     // around their centroid, scale grows/shrinks distances from the centroid.
     useEffect(() => {
         const map = window.atlasMapInstance;
-        if (!map || !transformMode) return undefined;
+        if (!map || !activeMode || activeMode === 'add') return undefined;
+        const transformMode = activeMode;
 
         map.getCanvas().style.cursor = 'grab';
 
@@ -314,22 +326,15 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
             map.off('mouseup', onMouseUp);
             transformDragRef.current = null;
             map.dragPan.enable();
-            map.getCanvas().style.cursor = 'crosshair';
+            map.getCanvas().style.cursor = '';
         };
-    }, [transformMode]);
+    }, [activeMode]);
 
-    // On unmount, always clear the map cursor. Declared after the transform
-    // effect so its cleanup runs last and wins over the 'crosshair' reset above.
-    useEffect(() => () => {
-        const map = window.atlasMapInstance;
-        if (map) map.getCanvas().style.cursor = '';
-    }, []);
-
-    const toggleTransformMode = (mode) => {
+    const toggleMode = (mode) => {
         setShowColorMenu(false);
         setShowOpacityMenu(false);
         setOpenIconPicker(null);
-        setTransformMode(prev => (prev === mode ? null : mode));
+        setActiveMode(prev => (prev === mode ? null : mode));
     };
 
     const handleClearAll = () => {
@@ -337,7 +342,7 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
         saveToHistoryRef.current?.();
         setPoints([]);
         setOpenIconPicker(null);
-        setTransformMode(null);
+        setActiveMode('add');
     };
 
     // Align the panel's top with the "Add card from map" map control button so it
@@ -394,18 +399,31 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
             <div className="polygon-draw-modal-header">
                 <h3>Add Points</h3>
                 <span className="polygon-draw-modal-hint">
-                    {transformMode === 'move'
-                        ? 'Drag to move all points'
-                        : transformMode === 'rotate'
-                            ? 'Drag to rotate points around their center'
-                            : transformMode === 'scale'
-                                ? 'Drag to scale points from their center'
-                                : 'Click on the map to add points'}
+                    {activeMode === 'add'
+                        ? 'Click on the map to add points'
+                        : activeMode === 'move'
+                            ? 'Drag to move all points'
+                            : activeMode === 'rotate'
+                                ? 'Drag to rotate points around their center'
+                                : activeMode === 'scale'
+                                    ? 'Drag to scale points from their center'
+                                    : 'Drag points to adjust'}
                 </span>
             </div>
 
             {/* Style toolbar (same look as the polygon drawing modal) */}
             <div className="polygon-draw-style-toolbar">
+                {/* Add points */}
+                <div className="polygon-draw-style-btn-wrap">
+                    <button
+                        type="button"
+                        className={`polygon-draw-style-btn${activeMode === 'add' ? ' polygon-draw-drag-active' : ''}`}
+                        title="Add Points"
+                        onClick={() => toggleMode('add')}
+                    >
+                        <FontAwesomeIcon icon={faPlus} style={{ fontSize: 15, width: 16, height: 16 }} />
+                    </button>
+                </div>
                 {/* Marker color */}
                 <div className="polygon-draw-style-btn-wrap">
                     <button
@@ -493,10 +511,10 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
                 <div className="polygon-draw-style-btn-wrap">
                     <button
                         type="button"
-                        className={`polygon-draw-style-btn${transformMode === 'move' ? ' polygon-draw-drag-active' : ''}`}
+                        className={`polygon-draw-style-btn${activeMode === 'move' ? ' polygon-draw-drag-active' : ''}`}
                         title="Move Points"
                         disabled={points.length < 1}
-                        onClick={() => toggleTransformMode('move')}
+                        onClick={() => toggleMode('move')}
                     >
                         <FontAwesomeIcon icon={faHand} style={{ fontSize: 16, width: 16, height: 16 }} />
                     </button>
@@ -505,10 +523,10 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
                 <div className="polygon-draw-style-btn-wrap">
                     <button
                         type="button"
-                        className={`polygon-draw-style-btn${transformMode === 'rotate' ? ' polygon-draw-rotate-active' : ''}`}
+                        className={`polygon-draw-style-btn${activeMode === 'rotate' ? ' polygon-draw-rotate-active' : ''}`}
                         title="Rotate Points"
                         disabled={points.length < 2}
-                        onClick={() => toggleTransformMode('rotate')}
+                        onClick={() => toggleMode('rotate')}
                     >
                         <FontAwesomeIcon icon={faRotate} style={{ fontSize: 16, width: 16, height: 16 }} />
                     </button>
@@ -517,10 +535,10 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
                 <div className="polygon-draw-style-btn-wrap">
                     <button
                         type="button"
-                        className={`polygon-draw-style-btn${transformMode === 'scale' ? ' polygon-draw-resize-active' : ''}`}
+                        className={`polygon-draw-style-btn${activeMode === 'scale' ? ' polygon-draw-resize-active' : ''}`}
                         title="Scale Points"
                         disabled={points.length < 2}
-                        onClick={() => toggleTransformMode('scale')}
+                        onClick={() => toggleMode('scale')}
                     >
                         <FontAwesomeIcon icon={faUpRightAndDownLeftFromCenter} style={{ fontSize: 14, width: 16, height: 16 }} />
                     </button>
