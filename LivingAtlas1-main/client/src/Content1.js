@@ -272,16 +272,32 @@ const Content1 = (props) => {
   const isLoggedInRef = useRef(props.isLoggedIn);
   useEffect(() => { isLoggedInRef.current = props.isLoggedIn; }, [props.isLoggedIn]);
 
+  // Mirrors the card-marker hover style (soft dark drop shadow) for GL overlay
+  // shapes: toggles the glow line layer around card polygons / image overlays.
+  const setCardOverlayHighlight = useCallback((mapInstance, cardID, highlighted) => {
+    if (!mapInstance || cardID == null) return;
+    const opacity = highlighted ? 0.28 : 0;
+    [`card-polygon-hover-${cardID}`, `card-image-hover-${cardID}`].forEach((layerId) => {
+      if (mapInstance.getLayer(layerId)) {
+        mapInstance.setPaintProperty(layerId, 'line-opacity', opacity);
+      }
+    });
+  }, []);
+
   const closeMarkerPopup = useCallback(() => {
+    const openCardId = openMarkerIdRef.current;
     if (markerPopupRef.current) {
       markerPopupRef.current.remove();
       markerPopupRef.current = null;
+    }
+    if (openCardId != null) {
+      setCardOverlayHighlight(mapRef.current, openCardId, false);
     }
     openMarkerIdRef.current = null;
     marker_clicked = false;
     setSearchCondition("");
     onMarkerCardSelect?.(null);
-  }, [setSearchCondition, onMarkerCardSelect]);
+  }, [setSearchCondition, onMarkerCardSelect, setCardOverlayHighlight]);
 
   const resolveImageUrl = useCallback((url) => {
     if (!url) return '/CEREO-logo.png';
@@ -602,6 +618,8 @@ const Content1 = (props) => {
   const openMarkerPopup = useCallback((feature, lngLatOrMarker, mapInstance) => {
     closeMarkerPopup();
     openMarkerIdRef.current = feature.cardID;
+    // Keep the hover effect on while the popup for this shape is open.
+    setCardOverlayHighlight(mapInstance, feature.cardID, true);
 
     const lngLat = lngLatOrMarker && typeof lngLatOrMarker.getLngLat === 'function'
       ? lngLatOrMarker.getLngLat()
@@ -625,6 +643,7 @@ const Content1 = (props) => {
       if (markerPopupRef.current === popup) {
         markerPopupRef.current = null;
         openMarkerIdRef.current = null;
+        setCardOverlayHighlight(mapInstance, feature.cardID, false);
       }
       marker_clicked = false;
       setSearchCondition("");
@@ -633,7 +652,7 @@ const Content1 = (props) => {
 
     markerPopupRef.current = popup;
     onMarkerCardSelect?.(feature.cardID);
-  }, [buildMarkerPopupContent, closeMarkerPopup, setSearchCondition, onMarkerCardSelect]);
+  }, [buildMarkerPopupContent, closeMarkerPopup, setSearchCondition, onMarkerCardSelect, setCardOverlayHighlight]);
 
   // Move map when user clicks a card
   useEffect(() => {
@@ -904,8 +923,10 @@ const Content1 = (props) => {
               if (
                 layer.id.startsWith('card-polygon-fill-') ||
                 layer.id.startsWith('card-polygon-line-') ||
+                layer.id.startsWith('card-polygon-hover-') ||
                 layer.id.startsWith('card-image-layer-') ||
                 layer.id.startsWith('card-image-outline-') ||
+                layer.id.startsWith('card-image-hover-') ||
                 layer.id.startsWith('card-image-hit-')
               ) {
                 map.setLayoutProperty(layer.id, 'visibility', visible ? 'visible' : 'none');
@@ -1167,19 +1188,23 @@ const Content1 = (props) => {
         const sourceId = `card-polygon-${feature.cardID}`;
         const fillLayerId = `card-polygon-fill-${feature.cardID}`;
         const lineLayerId = `card-polygon-line-${feature.cardID}`;
+        const polygonHoverLayerId = `card-polygon-hover-${feature.cardID}`;
         const imageSourceId = `card-image-${feature.cardID}`;
         const imageLayerId = `card-image-layer-${feature.cardID}`;
         const imageHitSourceId = `card-image-hit-source-${feature.cardID}`;
         const imageHitLayerId = `card-image-hit-${feature.cardID}`;
+        const imageHoverLayerId = `card-image-hover-${feature.cardID}`;
         const imageOutlineSourceId = `card-image-outline-source-${feature.cardID}`;
         const imageOutlineLayerId = `card-image-outline-${feature.cardID}`;
         if (mapInstance.getLayer(fillLayerId)) mapInstance.removeLayer(fillLayerId);
+        if (mapInstance.getLayer(polygonHoverLayerId)) mapInstance.removeLayer(polygonHoverLayerId);
         // Remove the legacy single line layer and every per-style line layer.
         ['', '-solid', '-dashed', '-dotted', '-dashdot'].forEach(suffix => {
           const styleLineId = `${lineLayerId}${suffix}`;
           if (mapInstance.getLayer(styleLineId)) mapInstance.removeLayer(styleLineId);
         });
         if (mapInstance.getSource(sourceId)) mapInstance.removeSource(sourceId);
+        if (mapInstance.getLayer(imageHoverLayerId)) mapInstance.removeLayer(imageHoverLayerId);
         if (mapInstance.getLayer(imageHitLayerId)) mapInstance.removeLayer(imageHitLayerId);
         if (mapInstance.getLayer(imageLayerId)) mapInstance.removeLayer(imageLayerId);
         if (mapInstance.getLayer(imageOutlineLayerId)) mapInstance.removeLayer(imageOutlineLayerId);
@@ -1253,6 +1278,20 @@ const Content1 = (props) => {
             }
           });
 
+          // Hover glow layer — the GL-layer analogue of the card-marker hover
+          // drop-shadow (rgba(0,0,0,0.28)). Kept invisible until hovered.
+          mapInstance.addLayer({
+            id: `card-polygon-hover-${feature.cardID}`,
+            type: 'line',
+            source: sourceId,
+            paint: {
+              'line-color': '#000000',
+              'line-width': 12,
+              'line-blur': 10,
+              'line-opacity': 0
+            }
+          });
+
           mapInstance.addLayer({
             id: fillLayerId,
             type: 'fill',
@@ -1296,6 +1335,8 @@ const Content1 = (props) => {
             preventGenericClickClose = true;
             if (markerPopupRef.current && openMarkerIdRef.current === feature.cardID) {
               closeMarkerPopup();
+              // Pointer is still over the shape, so keep the plain hover effect on.
+              setCardOverlayHighlight(mapInstance, feature.cardID, true);
               return;
             }
             marker_clicked = true;
@@ -1304,9 +1345,14 @@ const Content1 = (props) => {
           };
           const polygonEnterHandler = () => {
             mapInstance.getCanvas().style.cursor = 'pointer';
+            setCardOverlayHighlight(mapInstance, feature.cardID, true);
           };
           const polygonLeaveHandler = () => {
             mapInstance.getCanvas().style.cursor = '';
+            // Keep the effect on while this shape's popup is open.
+            if (openMarkerIdRef.current !== feature.cardID) {
+              setCardOverlayHighlight(mapInstance, feature.cardID, false);
+            }
           };
           mapInstance.on('click', fillLayerId, polygonClickHandler);
           mapInstance.on('mouseenter', fillLayerId, polygonEnterHandler);
@@ -1344,6 +1390,20 @@ const Content1 = (props) => {
           }
         });
 
+        // Hover glow layer — the GL-layer analogue of the card-marker hover
+        // drop-shadow (rgba(0,0,0,0.28)). Kept invisible until hovered.
+        mapInstance.addLayer({
+          id: `card-image-hover-${feature.cardID}`,
+          type: 'line',
+          source: imageHitSourceId,
+          paint: {
+            'line-color': '#000000',
+            'line-width': 12,
+            'line-blur': 10,
+            'line-opacity': 0
+          }
+        });
+
         mapInstance.addLayer({
           id: imageHitLayerId,
           type: 'fill',
@@ -1359,6 +1419,8 @@ const Content1 = (props) => {
           preventGenericClickClose = true;
           if (markerPopupRef.current && openMarkerIdRef.current === feature.cardID) {
             closeMarkerPopup();
+            // Pointer is still over the shape, so keep the plain hover effect on.
+            setCardOverlayHighlight(mapInstance, feature.cardID, true);
             return;
           }
           marker_clicked = true;
@@ -1367,9 +1429,14 @@ const Content1 = (props) => {
         };
         const imageEnterHandler = () => {
           mapInstance.getCanvas().style.cursor = 'pointer';
+          setCardOverlayHighlight(mapInstance, feature.cardID, true);
         };
         const imageLeaveHandler = () => {
           mapInstance.getCanvas().style.cursor = '';
+          // Keep the effect on while this shape's popup is open.
+          if (openMarkerIdRef.current !== feature.cardID) {
+            setCardOverlayHighlight(mapInstance, feature.cardID, false);
+          }
         };
         mapInstance.on('click', imageHitLayerId, imageClickHandler);
         mapInstance.on('mouseenter', imageHitLayerId, imageEnterHandler);

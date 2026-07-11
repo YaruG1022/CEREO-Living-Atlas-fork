@@ -124,13 +124,21 @@ function cloneCurveControlPoints(ctrlPts = {}) {
     );
 }
 
-function createHistorySnapshot(vertices, curveControlPoints, fillColor, fillOpacity, lineStyle) {
+function createHistorySnapshot(vertices, curveControlPoints, fillColor, fillOpacity, lineStyle, multiRing = {}) {
     return {
         vertices: vertices.map(vertex => ({ ...vertex })),
         curveControlPoints: cloneCurveControlPoints(curveControlPoints),
         fillColor: fillColor ?? DEFAULT_POLYGON_COLOR,
         fillOpacity: fillOpacity ?? 0.15,
         lineStyle: lineStyle ?? 'solid',
+        // Multi-polygon (ring) state — without this, undoing e.g. Clear All
+        // would only bring back the active ring.
+        completedPolygons: (multiRing.completedPolygons || []).map(p => ({
+            ...p,
+            vertices: (p.vertices || []).map(v => ({ ...v })),
+        })),
+        activeRingId: multiRing.activeRingId ?? null,
+        activeRingNum: multiRing.activeRingNum ?? 1,
     };
 }
 
@@ -144,7 +152,12 @@ function normalizeHistorySnapshot(snapshot) {
         snapshot?.curveControlPoints || {},
         snapshot?.fillColor,
         snapshot?.fillOpacity,
-        snapshot?.lineStyle
+        snapshot?.lineStyle,
+        {
+            completedPolygons: snapshot?.completedPolygons || [],
+            activeRingId: snapshot?.activeRingId ?? null,
+            activeRingNum: snapshot?.activeRingNum,
+        }
     );
 }
 
@@ -862,7 +875,11 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
     // ── Undo / Redo ──
     // saveToHistoryRef.current() always captures the latest polygon geometry state via refs.
     saveToHistoryRef.current = () => {
-        const snap = createHistorySnapshot(verticesRef.current, curveControlPointsRef.current, fillColorRef.current, fillOpacityRef.current, lineStyleRef.current);
+        const snap = createHistorySnapshot(verticesRef.current, curveControlPointsRef.current, fillColorRef.current, fillOpacityRef.current, lineStyleRef.current, {
+            completedPolygons: completedPolygonsRef.current,
+            activeRingId: activeRingIdRef.current,
+            activeRingNum: activeRingNumRef.current,
+        });
         setHistory(prev => [...prev.slice(-49), snap]);
         setFuture([]);
     };
@@ -881,18 +898,35 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
         if (normalized.fillColor) setFillColor(normalized.fillColor);
         if (normalized.fillOpacity !== undefined) setFillOpacity(normalized.fillOpacity);
         if (normalized.lineStyle) setLineStyle(normalized.lineStyle);
+        // Restore multi-polygon (completed ring) state: rebuild static overlays
+        // to match the snapshot.
+        [...completedRingLayersRef.current].forEach(l => removeCompletedRingFromMap(l.id));
+        const restoredRings = normalized.completedPolygons;
+        restoredRings
+            .filter(r => r.id !== normalized.activeRingId) // active ring is drawn live, not as overlay
+            .forEach(r => addCompletedRingToMap(r.id, r.vertices, r));
+        setCompletedPolygons(restoredRings);
+        setActiveRingId(normalized.activeRingId);
+        setActiveRingNum(normalized.activeRingNum);
+        // Keep id/label counters ahead of restored rings so new rings never collide.
+        nextRingIdRef.current = Math.max(nextRingIdRef.current, ...restoredRings.map(r => r.id + 1));
+        nextNewNumRef.current = Math.max(nextNewNumRef.current, normalized.activeRingNum + 1, ...restoredRings.map(r => (r.num ?? 0) + 1));
         updatePolygonOnMap(restoredVertices);
         rebuildMarkers(restoredVertices);
         rebuildCurveMarkers(restoredVertices, curveControlPointsRef.current);
         circleMetaRef.current = null;
         // If resize mode is active, refresh the 8 handles to match restored vertices
         if (placeHandlesRef.current) placeHandlesRef.current(restoredVertices);
-    }, [updatePolygonOnMap, rebuildMarkers, rebuildCurveMarkers]);
+    }, [updatePolygonOnMap, rebuildMarkers, rebuildCurveMarkers, addCompletedRingToMap, removeCompletedRingFromMap]);
 
     const handleUndo = useCallback(() => {
         if (history.length === 0) return;
         const prevSnapshot = history[history.length - 1];
-        setFuture(f => [createHistorySnapshot(vertices, curveControlPointsRef.current, fillColorRef.current, fillOpacityRef.current), ...f.slice(0, 49)]);
+        setFuture(f => [createHistorySnapshot(vertices, curveControlPointsRef.current, fillColorRef.current, fillOpacityRef.current, lineStyleRef.current, {
+            completedPolygons: completedPolygonsRef.current,
+            activeRingId: activeRingIdRef.current,
+            activeRingNum: activeRingNumRef.current,
+        }), ...f.slice(0, 49)]);
         setHistory(h => h.slice(0, -1));
         restoreHistorySnapshot(prevSnapshot);
     }, [history, vertices, restoreHistorySnapshot]);
@@ -900,7 +934,11 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
     const handleRedo = useCallback(() => {
         if (future.length === 0) return;
         const nextSnapshot = future[0];
-        setHistory(h => [...h.slice(-49), createHistorySnapshot(vertices, curveControlPointsRef.current, fillColorRef.current, fillOpacityRef.current)]);
+        setHistory(h => [...h.slice(-49), createHistorySnapshot(vertices, curveControlPointsRef.current, fillColorRef.current, fillOpacityRef.current, lineStyleRef.current, {
+            completedPolygons: completedPolygonsRef.current,
+            activeRingId: activeRingIdRef.current,
+            activeRingNum: activeRingNumRef.current,
+        })]);
         setFuture(f => f.slice(1));
         restoreHistorySnapshot(nextSnapshot);
     }, [future, vertices, restoreHistorySnapshot]);

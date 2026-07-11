@@ -904,7 +904,12 @@ function Card(props) {
                 const fillLayerId = `card-polygon-fill-${cardID}`;
                 const lineLayerId = `card-polygon-line-${cardID}`;
                 if (map.getLayer(fillLayerId)) map.setLayoutProperty(fillLayerId, 'visibility', 'none');
-                if (map.getLayer(lineLayerId)) map.setLayoutProperty(lineLayerId, 'visibility', 'none');
+                // Borders are rendered as one line layer per line style (plus the legacy
+                // single layer on older sessions) — hide every variant.
+                ['', '-solid', '-dashed', '-dotted', '-dashdot'].forEach(suffix => {
+                    const styleLineId = `${lineLayerId}${suffix}`;
+                    if (map.getLayer(styleLineId)) map.setLayoutProperty(styleLineId, 'visibility', 'none');
+                });
             }
         }
 
@@ -936,7 +941,11 @@ function Card(props) {
         const fillLayerId = `card-polygon-fill-${cardID}`;
         const lineLayerId = `card-polygon-line-${cardID}`;
         if (map.getLayer(fillLayerId)) map.setLayoutProperty(fillLayerId, 'visibility', 'visible');
-        if (map.getLayer(lineLayerId)) map.setLayoutProperty(lineLayerId, 'visibility', 'visible');
+        // Restore every per-style border line layer (plus the legacy single layer).
+        ['', '-solid', '-dashed', '-dotted', '-dashdot'].forEach(suffix => {
+            const styleLineId = `${lineLayerId}${suffix}`;
+            if (map.getLayer(styleLineId)) map.setLayoutProperty(styleLineId, 'visibility', 'visible');
+        });
     }, [formData.cardID, formData.location_type, props.cardID]);
 
     // After polygon edit save: update formData and return to learn-more modal (edit mode)
@@ -1031,6 +1040,13 @@ function Card(props) {
                 if (map.getLayer(lineLayerId)) {
                     map.setPaintProperty(lineLayerId, 'line-color', fillColor);
                 }
+                // Also recolor the per-style border line layers.
+                ['-solid', '-dashed', '-dotted', '-dashdot'].forEach(suffix => {
+                    const styleLineId = `${lineLayerId}${suffix}`;
+                    if (map.getLayer(styleLineId)) {
+                        map.setPaintProperty(styleLineId, 'line-color', fillColor);
+                    }
+                });
             }
         }
     }, [formData.cardID, formData.location_type, formData.polygon_fill_color, getRepresentativeImageUrl, preview, props.cardID, restoreCardPolygonLayers, thumbnail]);
