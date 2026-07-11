@@ -767,13 +767,23 @@ async def upload_form(
                 p_icon = point.get("icon") if isinstance(point, dict) else None
                 if isinstance(p_icon, str):
                     p_icon = p_icon[:60]
+                p_color = point.get("color") if isinstance(point, dict) else None
+                if isinstance(p_color, str):
+                    p_color = p_color[:20]
+                else:
+                    p_color = None
+                p_opacity = point.get("opacity") if isinstance(point, dict) else None
+                try:
+                    p_opacity = min(1.0, max(0.0, float(p_opacity))) if p_opacity is not None else None
+                except (TypeError, ValueError):
+                    p_opacity = None
                 cur.execute(
                     """
                     INSERT INTO CardPolygonVertices
-                        (CardID, RingIndex, VertexOrder, Latitude, Longitude, Icon)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                        (CardID, RingIndex, VertexOrder, Latitude, Longitude, Icon, FillColor, FillOpacity)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     """,
-                    (nextcardid, 0, point_order, p_lat, p_lng, p_icon)
+                    (nextcardid, 0, point_order, p_lat, p_lng, p_icon, p_color, p_opacity)
                 )
                 mp_inserted += 1
             print(f"[DB] Multi-point markers inserted: {mp_inserted} points")

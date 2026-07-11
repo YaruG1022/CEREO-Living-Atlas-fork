@@ -25,7 +25,7 @@ const FormModal = (props) => {
     const [isPlacingMultipoint, setIsPlacingMultipoint] = useState(false);
     const [isCreateCardOnboardingOpen, setIsCreateCardOnboardingOpen] = useState(false);
     const [locationType, setLocationType] = useState('point'); // 'point' (1+ coordinates) | 'polygon' | 'image'
-    const [multiPoints, setMultiPoints] = useState([]); // [{ lat, lng, icon }]
+    const [multiPoints, setMultiPoints] = useState([]); // [{ lat, lng, icon, color, opacity }]
     const [polygonVertices, setPolygonVertices] = useState([]);
     const [polygonFillColor, setPolygonFillColor] = useState('#0077c0');
     const [polygonLineStyle, setPolygonLineStyle] = useState('solid');
@@ -304,7 +304,7 @@ const FormModal = (props) => {
         }
         if (effectiveLocationType === 'multipoint' && multiPoints.length > 0) {
             formData2.append('multipoint_coordinates', JSON.stringify(
-                multiPoints.map(p => ({ lat: p.lat, lng: p.lng, icon: p.icon }))
+                multiPoints.map(p => ({ lat: p.lat, lng: p.lng, icon: p.icon, color: p.color, opacity: p.opacity }))
             ));
         }
 

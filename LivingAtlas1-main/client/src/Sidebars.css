@@ -530,7 +530,7 @@
     flex-grow: 1;
 }
 
-.left-sidebar-changelog-button {
+.left-sidebar .left-sidebar-changelog-button {
     margin-bottom: 8px;
     position: relative;
 }

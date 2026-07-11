@@ -82,7 +82,9 @@ def getMarkers():
                                     'fillColor', COALESCE(pv.FillColor, c.PolygonFillColor, '#0077c0'),
                                     'fillOpacity', COALESCE(pv.FillOpacity, 0.2),
                                     'lineStyle', COALESCE(pv.LineStyle, c.PolygonLineStyle, 'solid'),
-                                    'icon', pv.Icon
+                                    'icon', pv.Icon,
+                                    'markerColor', pv.FillColor,
+                                    'markerOpacity', pv.FillOpacity
                                 )
                                 ORDER BY COALESCE(pv.RingIndex, 0) ASC, pv.VertexOrder ASC
                             )

@@ -1097,7 +1097,10 @@ const Content1 = (props) => {
             const lat = parseFloat(pt.lat);
             if (isNaN(lng) || isNaN(lat)) return;
 
-            const pointEl = buildMarkerIconElement(pt.icon);
+            const pointEl = buildMarkerIconElement(pt.icon, pt.markerColor || undefined);
+            if (pt.markerOpacity !== null && pt.markerOpacity !== undefined) {
+              pointEl.style.opacity = pt.markerOpacity;
+            }
             const pointMarker = new mapboxgl.Marker({ element: pointEl, anchor: 'bottom' });
             pointMarker.setLngLat([lng, lat]);
             yellowMarkers.push([feature.category, feature.tags, [lng, lat]]);

@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import mapboxgl from 'mapbox-gl';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faHand, faRotate, faUpRightAndDownLeftFromCenter, faRotateLeft, faRotateRight, faTrash, faPalette } from '@fortawesome/free-solid-svg-icons';
+import { HexColorPicker } from 'react-colorful';
 import {
     MARKER_ICON_OPTIONS,
     DEFAULT_MARKER_ICON_KEY,
@@ -13,6 +16,18 @@ import './CoordinatesPanel.css';
 
 const round6 = (n) => parseFloat(Number(n).toFixed(6));
 
+const PALETTE_COLORS = [
+    '#0077c0', '#e74c3c', '#27ae60', '#f39c12',
+    '#8e44ad', '#1abc9c', '#2c3e50', '#000000',
+];
+
+const HEX_COLOR_RE = /^#([0-9a-fA-F]{6})$/;
+const normalizeHexColor = (value) => {
+    if (typeof value !== 'string') return MARKER_ICON_COLOR;
+    const v = value.trim();
+    return HEX_COLOR_RE.test(v) ? v : MARKER_ICON_COLOR;
+};
+
 /**
  * Side panel for building a one-or-many point card. Styled and positioned to
  * match the polygon drawing panel and the image placement panel (same portal
@@ -20,7 +35,9 @@ const round6 = (n) => parseFloat(Number(n).toFixed(6));
  * - Click the map to add points.
  * - Edit a point's position by typing latitude / longitude.
  * - Pick a FontAwesome icon per point.
- * Calls onSave(points) where points = [{ lat, lng, icon }].
+ * - Style toolbar (same as the polygon modal): marker color, opacity,
+ *   move / rotate / scale all points, undo / redo, clear all.
+ * Calls onSave(points) where points = [{ lat, lng, icon, color, opacity }].
  */
 function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
     const [points, setPoints] = useState(() =>
@@ -32,10 +49,53 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
     );
     const [openIconPicker, setOpenIconPicker] = useState(null); // index whose picker is open
 
+    // Marker style shared by all points
+    const [markerColor, setMarkerColor] = useState(() => normalizeHexColor(initialPoints[0]?.color || MARKER_ICON_COLOR));
+    const [markerOpacity, setMarkerOpacity] = useState(() => {
+        const o = parseFloat(initialPoints[0]?.opacity);
+        return isNaN(o) ? 1 : Math.min(1, Math.max(0, o));
+    });
+    const [hexInput, setHexInput] = useState(() => normalizeHexColor(initialPoints[0]?.color || MARKER_ICON_COLOR));
+    const [showColorMenu, setShowColorMenu] = useState(false);
+    const [showOpacityMenu, setShowOpacityMenu] = useState(false);
+
+    // Transform modes (mutually exclusive): 'move' | 'rotate' | 'scale' | null
+    const [transformMode, setTransformMode] = useState(null);
+
+    // Undo / redo stacks of { points, color, opacity }
+    const [history, setHistory] = useState([]);
+    const [future, setFuture] = useState([]);
+
     const markersRef = useRef([]);
     const panelRef = useRef(null);
 
+    // Always-current refs, safe to read from stale closures / map handlers
+    const pointsRef = useRef(points);
+    pointsRef.current = points;
+    const markerColorRef = useRef(markerColor);
+    markerColorRef.current = markerColor;
+    const markerOpacityRef = useRef(markerOpacity);
+    markerOpacityRef.current = markerOpacity;
+    const transformModeRef = useRef(transformMode);
+    transformModeRef.current = transformMode;
+    const transformDragRef = useRef(null); // in-progress transform drag state
+    const handleUndoRef = useRef(null);
+    const handleRedoRef = useRef(null);
+
+    const saveToHistory = useCallback(() => {
+        const snap = {
+            points: pointsRef.current.map(p => ({ ...p })),
+            color: markerColorRef.current,
+            opacity: markerOpacityRef.current,
+        };
+        setHistory(h => [...h.slice(-49), snap]);
+        setFuture([]);
+    }, []);
+    const saveToHistoryRef = useRef(saveToHistory);
+    saveToHistoryRef.current = saveToHistory;
+
     const addPoint = useCallback((lat, lng) => {
+        saveToHistoryRef.current?.();
         setPoints(prev => [
             ...prev,
             { lat: round6(lat), lng: round6(lng), icon: DEFAULT_MARKER_ICON_KEY },
@@ -47,6 +107,7 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
     }, []);
 
     const removePoint = useCallback((index) => {
+        saveToHistoryRef.current?.();
         setPoints(prev => prev.filter((_, i) => i !== index));
         setOpenIconPicker(null);
     }, []);
@@ -58,6 +119,7 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
 
         map.getCanvas().style.cursor = 'crosshair';
         const handleMapClick = (e) => {
+            if (transformModeRef.current) return; // ignore clicks while transforming
             const { lat, lng } = e.lngLat;
             addPoint(lat, lng);
         };
@@ -69,7 +131,7 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
         };
     }, [addPoint]);
 
-    // Keep the on-map markers in sync with the points list.
+    // Keep the on-map markers in sync with the points list and marker style.
     useEffect(() => {
         const map = window.atlasMapInstance;
         if (!map) return;
@@ -81,26 +143,202 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
             const lat = parseFloat(p.lat);
             const lng = parseFloat(p.lng);
             if (isNaN(lat) || isNaN(lng)) {
-                markersRef.current.push({ remove: () => {} });
+                markersRef.current.push({ remove: () => {}, setDraggable: () => {}, setLngLat: () => {} });
                 return;
             }
-            const el = buildMarkerIconElement(p.icon, MARKER_ICON_COLOR);
-            const marker = new mapboxgl.Marker({ element: el, draggable: true, anchor: 'bottom' })
+            const el = buildMarkerIconElement(p.icon, markerColor);
+            el.style.opacity = markerOpacity;
+            const marker = new mapboxgl.Marker({ element: el, draggable: !transformMode, anchor: 'bottom' })
                 .setLngLat([lng, lat])
                 .addTo(map);
+            marker.on('dragstart', () => {
+                saveToHistoryRef.current?.();
+            });
             marker.on('dragend', () => {
                 const pos = marker.getLngLat();
                 updatePoint(index, { lat: round6(pos.lat), lng: round6(pos.lng) });
             });
             markersRef.current.push(marker);
         });
-    }, [points, updatePoint]);
+    }, [points, updatePoint, markerColor, markerOpacity, transformMode]);
 
     // Clean up all markers when the panel unmounts.
     useEffect(() => () => {
         markersRef.current.forEach(m => m.remove());
         markersRef.current = [];
     }, []);
+
+    // ── Undo / Redo ──
+    const applySnapshot = useCallback((snap) => {
+        setPoints(snap.points.map(p => ({ ...p })));
+        setMarkerColor(snap.color);
+        setHexInput(normalizeHexColor(snap.color));
+        setMarkerOpacity(snap.opacity);
+        setOpenIconPicker(null);
+    }, []);
+
+    const handleUndo = useCallback(() => {
+        if (history.length === 0) return;
+        const snap = history[history.length - 1];
+        setFuture(f => [...f, {
+            points: pointsRef.current.map(p => ({ ...p })),
+            color: markerColorRef.current,
+            opacity: markerOpacityRef.current,
+        }]);
+        setHistory(h => h.slice(0, -1));
+        applySnapshot(snap);
+    }, [history, applySnapshot]);
+
+    const handleRedo = useCallback(() => {
+        if (future.length === 0) return;
+        const snap = future[future.length - 1];
+        setHistory(h => [...h.slice(-49), {
+            points: pointsRef.current.map(p => ({ ...p })),
+            color: markerColorRef.current,
+            opacity: markerOpacityRef.current,
+        }]);
+        setFuture(f => f.slice(0, -1));
+        applySnapshot(snap);
+    }, [future, applySnapshot]);
+
+    handleUndoRef.current = handleUndo;
+    handleRedoRef.current = handleRedo;
+
+    // Keyboard shortcuts: Ctrl+Z = undo, Ctrl+Y / Ctrl+Shift+Z = redo
+    useEffect(() => {
+        const handler = (e) => {
+            if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+                e.preventDefault();
+                handleUndoRef.current?.();
+            } else if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) {
+                e.preventDefault();
+                handleRedoRef.current?.();
+            }
+        };
+        document.addEventListener('keydown', handler);
+        return () => document.removeEventListener('keydown', handler);
+    }, []);
+
+    // ── Move / rotate / scale all points ──
+    // Drag anywhere on the map: move translates every point, rotate spins them
+    // around their centroid, scale grows/shrinks distances from the centroid.
+    useEffect(() => {
+        const map = window.atlasMapInstance;
+        if (!map || !transformMode) return undefined;
+
+        map.getCanvas().style.cursor = 'grab';
+
+        const centroidOf = (pts) => {
+            const valid = pts.filter(p => !isNaN(parseFloat(p.lat)) && !isNaN(parseFloat(p.lng)));
+            const lat = valid.reduce((s, p) => s + parseFloat(p.lat), 0) / valid.length;
+            const lng = valid.reduce((s, p) => s + parseFloat(p.lng), 0) / valid.length;
+            return { lat, lng };
+        };
+
+        const transformPoints = (startPoints, drag, cur) => {
+            if (transformMode === 'move') {
+                const dLat = cur.lat - drag.origin.lat;
+                const dLng = cur.lng - drag.origin.lng;
+                return startPoints.map(p => ({
+                    ...p,
+                    lat: round6(parseFloat(p.lat) + dLat),
+                    lng: round6(parseFloat(p.lng) + dLng),
+                }));
+            }
+            const { centroid } = drag;
+            const cosLat = Math.cos(centroid.lat * Math.PI / 180) || 1;
+            if (transformMode === 'rotate') {
+                const startAngle = Math.atan2(drag.origin.lat - centroid.lat, (drag.origin.lng - centroid.lng) * cosLat);
+                const curAngle = Math.atan2(cur.lat - centroid.lat, (cur.lng - centroid.lng) * cosLat);
+                const delta = curAngle - startAngle;
+                const cosA = Math.cos(delta);
+                const sinA = Math.sin(delta);
+                return startPoints.map(p => {
+                    const dx = (parseFloat(p.lng) - centroid.lng) * cosLat;
+                    const dy = parseFloat(p.lat) - centroid.lat;
+                    return {
+                        ...p,
+                        lng: round6(centroid.lng + (dx * cosA - dy * sinA) / cosLat),
+                        lat: round6(centroid.lat + dx * sinA + dy * cosA),
+                    };
+                });
+            }
+            // scale
+            const dist = (pt) => Math.hypot((pt.lng - centroid.lng) * cosLat, pt.lat - centroid.lat);
+            const d0 = dist(drag.origin);
+            const d1 = dist(cur);
+            const factor = d0 > 1e-9 ? d1 / d0 : 1;
+            return startPoints.map(p => ({
+                ...p,
+                lng: round6(centroid.lng + (parseFloat(p.lng) - centroid.lng) * factor),
+                lat: round6(centroid.lat + (parseFloat(p.lat) - centroid.lat) * factor),
+            }));
+        };
+
+        const onMouseDown = (e) => {
+            e.preventDefault();
+            saveToHistoryRef.current?.();
+            transformDragRef.current = {
+                origin: { lat: e.lngLat.lat, lng: e.lngLat.lng },
+                centroid: centroidOf(pointsRef.current),
+                startPoints: pointsRef.current.map(p => ({ ...p })),
+            };
+            map.dragPan.disable();
+            map.getCanvas().style.cursor = 'grabbing';
+        };
+
+        const onMouseMove = (e) => {
+            if (!transformDragRef.current) return;
+            const moved = transformPoints(transformDragRef.current.startPoints, transformDragRef.current, e.lngLat);
+            moved.forEach((p, i) => {
+                markersRef.current[i]?.setLngLat?.([p.lng, p.lat]);
+            });
+        };
+
+        const onMouseUp = (e) => {
+            if (!transformDragRef.current) return;
+            const moved = transformPoints(transformDragRef.current.startPoints, transformDragRef.current, e.lngLat);
+            transformDragRef.current = null;
+            map.dragPan.enable();
+            map.getCanvas().style.cursor = 'grab';
+            setPoints(moved);
+        };
+
+        map.on('mousedown', onMouseDown);
+        map.on('mousemove', onMouseMove);
+        map.on('mouseup', onMouseUp);
+
+        return () => {
+            map.off('mousedown', onMouseDown);
+            map.off('mousemove', onMouseMove);
+            map.off('mouseup', onMouseUp);
+            transformDragRef.current = null;
+            map.dragPan.enable();
+            map.getCanvas().style.cursor = 'crosshair';
+        };
+    }, [transformMode]);
+
+    // On unmount, always clear the map cursor. Declared after the transform
+    // effect so its cleanup runs last and wins over the 'crosshair' reset above.
+    useEffect(() => () => {
+        const map = window.atlasMapInstance;
+        if (map) map.getCanvas().style.cursor = '';
+    }, []);
+
+    const toggleTransformMode = (mode) => {
+        setShowColorMenu(false);
+        setShowOpacityMenu(false);
+        setOpenIconPicker(null);
+        setTransformMode(prev => (prev === mode ? null : mode));
+    };
+
+    const handleClearAll = () => {
+        if (pointsRef.current.length === 0) return;
+        saveToHistoryRef.current?.();
+        setPoints([]);
+        setOpenIconPicker(null);
+        setTransformMode(null);
+    };
 
     // Align the panel's top with the "Add card from map" map control button so it
     // sits at the same height as the button that launches this flow (the button is
@@ -133,7 +371,13 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
 
     const handleSave = () => {
         const cleaned = points
-            .map(p => ({ lat: parseFloat(p.lat), lng: parseFloat(p.lng), icon: p.icon || DEFAULT_MARKER_ICON_KEY }))
+            .map(p => ({
+                lat: parseFloat(p.lat),
+                lng: parseFloat(p.lng),
+                icon: p.icon || DEFAULT_MARKER_ICON_KEY,
+                color: markerColor,
+                opacity: markerOpacity,
+            }))
             .filter(p => !isNaN(p.lat) && !isNaN(p.lng) && p.lat >= -90 && p.lat <= 90 && p.lng >= -180 && p.lng <= 180);
         if (cleaned.length < 1) {
             alert('Add at least one valid point before saving.');
@@ -149,7 +393,174 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
         <div className="polygon-draw-modal coordinates-panel" ref={panelRef}>
             <div className="polygon-draw-modal-header">
                 <h3>Add Points</h3>
-                <span className="polygon-draw-modal-hint">Click on the map to add points</span>
+                <span className="polygon-draw-modal-hint">
+                    {transformMode === 'move'
+                        ? 'Drag to move all points'
+                        : transformMode === 'rotate'
+                            ? 'Drag to rotate points around their center'
+                            : transformMode === 'scale'
+                                ? 'Drag to scale points from their center'
+                                : 'Click on the map to add points'}
+                </span>
+            </div>
+
+            {/* Style toolbar (same look as the polygon drawing modal) */}
+            <div className="polygon-draw-style-toolbar">
+                {/* Marker color */}
+                <div className="polygon-draw-style-btn-wrap">
+                    <button
+                        type="button"
+                        className="polygon-draw-style-btn"
+                        title="Marker Color"
+                        onClick={() => { setShowColorMenu(v => !v); setShowOpacityMenu(false); }}
+                    >
+                        <FontAwesomeIcon icon={faPalette} style={{ fontSize: 14, width: 16, height: 16, color: markerColor }} />
+                    </button>
+                    {showColorMenu && (
+                        <div className="polygon-draw-dropdown polygon-draw-color-menu">
+                            <div className="polygon-draw-color-grid">
+                                {PALETTE_COLORS.map(c => (
+                                    <button
+                                        key={c}
+                                        type="button"
+                                        className={`polygon-draw-color-option${markerColor === c ? ' active' : ''}`}
+                                        style={{ background: c }}
+                                        onClick={() => { saveToHistoryRef.current?.(); setMarkerColor(c); setHexInput(c); setShowColorMenu(false); }}
+                                    />
+                                ))}
+                            </div>
+                            <div className="polygon-draw-color-custom">
+                                <HexColorPicker
+                                    className="polygon-draw-color-picker"
+                                    color={normalizeHexColor(markerColor)}
+                                    onMouseDown={() => saveToHistoryRef.current?.()}
+                                    onChange={(c) => { setMarkerColor(c); setHexInput(c); }}
+                                />
+                                <input
+                                    type="text"
+                                    className="polygon-draw-color-hex"
+                                    value={hexInput}
+                                    spellCheck={false}
+                                    maxLength={7}
+                                    placeholder="#RRGGBB"
+                                    onChange={(e) => {
+                                        let v = e.target.value;
+                                        if (v && !v.startsWith('#')) v = '#' + v;
+                                        setHexInput(v);
+                                        if (HEX_COLOR_RE.test(v)) {
+                                            saveToHistoryRef.current?.();
+                                            setMarkerColor(v);
+                                        }
+                                    }}
+                                    onBlur={() => {
+                                        if (!HEX_COLOR_RE.test(hexInput)) setHexInput(normalizeHexColor(markerColor));
+                                    }}
+                                    aria-label="Hex color value"
+                                />
+                            </div>
+                        </div>
+                    )}
+                </div>
+                {/* Marker opacity */}
+                <div className="polygon-draw-style-btn-wrap">
+                    <button
+                        type="button"
+                        className="polygon-draw-style-btn"
+                        title="Marker Opacity"
+                        onClick={() => { setShowOpacityMenu(v => !v); setShowColorMenu(false); }}
+                    >
+                        <span className="polygon-draw-opacity-swatch" style={{ opacity: markerOpacity * 0.85 + 0.15 }} />
+                    </button>
+                    {showOpacityMenu && (
+                        <div className="polygon-draw-dropdown polygon-draw-opacity-dropdown">
+                            <label className="polygon-draw-opacity-label">
+                                Opacity: {Math.round(markerOpacity * 100)}%
+                            </label>
+                            <input
+                                type="range"
+                                className="polygon-draw-opacity-slider"
+                                min="0.1"
+                                max="1"
+                                step="0.01"
+                                value={markerOpacity}
+                                onMouseDown={() => saveToHistoryRef.current?.()}
+                                onChange={(e) => setMarkerOpacity(parseFloat(e.target.value))}
+                            />
+                        </div>
+                    )}
+                </div>
+                {/* Move all points */}
+                <div className="polygon-draw-style-btn-wrap">
+                    <button
+                        type="button"
+                        className={`polygon-draw-style-btn${transformMode === 'move' ? ' polygon-draw-drag-active' : ''}`}
+                        title="Move Points"
+                        disabled={points.length < 1}
+                        onClick={() => toggleTransformMode('move')}
+                    >
+                        <FontAwesomeIcon icon={faHand} style={{ fontSize: 16, width: 16, height: 16 }} />
+                    </button>
+                </div>
+                {/* Rotate all points */}
+                <div className="polygon-draw-style-btn-wrap">
+                    <button
+                        type="button"
+                        className={`polygon-draw-style-btn${transformMode === 'rotate' ? ' polygon-draw-rotate-active' : ''}`}
+                        title="Rotate Points"
+                        disabled={points.length < 2}
+                        onClick={() => toggleTransformMode('rotate')}
+                    >
+                        <FontAwesomeIcon icon={faRotate} style={{ fontSize: 16, width: 16, height: 16 }} />
+                    </button>
+                </div>
+                {/* Scale all points */}
+                <div className="polygon-draw-style-btn-wrap">
+                    <button
+                        type="button"
+                        className={`polygon-draw-style-btn${transformMode === 'scale' ? ' polygon-draw-resize-active' : ''}`}
+                        title="Scale Points"
+                        disabled={points.length < 2}
+                        onClick={() => toggleTransformMode('scale')}
+                    >
+                        <FontAwesomeIcon icon={faUpRightAndDownLeftFromCenter} style={{ fontSize: 14, width: 16, height: 16 }} />
+                    </button>
+                </div>
+                {/* Undo */}
+                <div className="polygon-draw-style-btn-wrap">
+                    <button
+                        type="button"
+                        className="polygon-draw-style-btn"
+                        title="Undo (Ctrl+Z)"
+                        disabled={history.length === 0}
+                        onClick={handleUndo}
+                    >
+                        <FontAwesomeIcon icon={faRotateLeft} style={{ fontSize: 14, width: 16, height: 16 }} />
+                    </button>
+                </div>
+                {/* Redo */}
+                <div className="polygon-draw-style-btn-wrap">
+                    <button
+                        type="button"
+                        className="polygon-draw-style-btn"
+                        title="Redo (Ctrl+Y)"
+                        disabled={future.length === 0}
+                        onClick={handleRedo}
+                    >
+                        <FontAwesomeIcon icon={faRotateRight} style={{ fontSize: 14, width: 16, height: 16 }} />
+                    </button>
+                </div>
+                {/* Clear all */}
+                <div className="polygon-draw-style-btn-wrap">
+                    <button
+                        type="button"
+                        className="polygon-draw-style-btn polygon-draw-clear-btn"
+                        title="Clear All"
+                        disabled={points.length === 0}
+                        onClick={handleClearAll}
+                    >
+                        <FontAwesomeIcon icon={faTrash} style={{ fontSize: 13, width: 15, height: 15 }} />
+                    </button>
+                </div>
             </div>
 
             <div className="polygon-draw-modal-vertices">
@@ -167,6 +578,7 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
                                     step="any"
                                     className="polygon-draw-vertex-input"
                                     value={p.lat}
+                                    onFocus={() => saveToHistoryRef.current?.()}
                                     onChange={(e) => handleLatChange(index, e.target.value)}
                                     title="Latitude"
                                 />
@@ -176,6 +588,7 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
                                     step="any"
                                     className="polygon-draw-vertex-input"
                                     value={p.lng}
+                                    onFocus={() => saveToHistoryRef.current?.()}
                                     onChange={(e) => handleLngChange(index, e.target.value)}
                                     title="Longitude"
                                 />
@@ -211,6 +624,7 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
                                         className={`coordinates-panel-icon-option${opt.key === p.icon ? ' active' : ''}`}
                                         title={opt.label}
                                         onClick={() => {
+                                            saveToHistoryRef.current?.();
                                             updatePoint(index, { icon: opt.key });
                                             setOpenIconPicker(null);
                                         }}
