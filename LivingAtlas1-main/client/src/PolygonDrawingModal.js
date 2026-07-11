@@ -222,7 +222,9 @@ function parseCompletedRings(initialVertices, isImageMode) {
         ringMap.get(r).push(v);
     }
     const sorted = [...ringMap.entries()].sort(([a], [b]) => a - b);
-    return sorted.slice(0, -1).map(([, verts], i) => {
+    // All rings are "completed" rings; the last one is additionally loaded into
+    // the canvas for in-place editing (activeRingId points at it).
+    return sorted.map(([, verts], i) => {
         const first = verts[0] || {};
         return {
             id: i + 1,
@@ -324,8 +326,13 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
     const activeRingNumRef = useRef(1);
     activeRingNumRef.current = activeRingNum;
     // activeRingId: which completedPolygon ring is currently selected for in-place editing
-    // null = drawing a brand-new ring; non-null = editing an existing completed ring
-    const [activeRingId, setActiveRingId] = useState(null);
+    // null = drawing a brand-new ring; non-null = editing an existing completed ring.
+    // For multi-ring cards the last ring starts loaded in the canvas, so it begins
+    // as the in-place-edited ring (keeps its list entry styled as a normal group).
+    const [activeRingId, setActiveRingId] = useState(() => {
+        const rings = parseCompletedRings(initialVertices, isImageMode);
+        return rings.length > 0 ? rings[rings.length - 1].id : null;
+    });
     const activeRingIdRef = useRef(null);
     activeRingIdRef.current = activeRingId;
     const completedRingLayersRef = useRef([]); // [{id, srcId, lineLayId, fillLayId}]

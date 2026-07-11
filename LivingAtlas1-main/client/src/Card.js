@@ -201,12 +201,17 @@ function Card(props) {
     }, [isLearnMoreModalVisible, isLearnMoreOnboardingOpen]);
 
     const [learnMoreOnboardingStep, setLearnMoreOnboardingStep] = useState(0);
+    // True only when edit mode was entered automatically by the learn-more onboarding
+    // tour — prevents the onboarding effect from exiting user-initiated edit mode
+    // (e.g. when the modal is temporarily hidden during polygon editing).
+    const onboardingEditModeRef = useRef(false);
 
     // Enter edit mode at step 5 (index 4+), exit when onboarding closes
     useEffect(() => {
         if (!isLearnMoreOnboardingOpen || !isLearnMoreModalVisible) {
-            // Exit edit mode when onboarding closes
-            if (isLearnMoreEditMode) {
+            // Exit edit mode only if onboarding was the one that enabled it
+            if (isLearnMoreEditMode && onboardingEditModeRef.current) {
+                onboardingEditModeRef.current = false;
                 setIsLearnMoreEditMode(false);
                 isEditingRef.current = false;
             }
@@ -214,6 +219,7 @@ function Card(props) {
         }
         const shouldBeInEditMode = learnMoreOnboardingStep >= LEARN_MORE_EDIT_MODE_STEP;
         if (shouldBeInEditMode && !isLearnMoreEditMode) {
+            onboardingEditModeRef.current = true;
             isEditingRef.current = true;
             setEditFormLinks(parseLinks(formData.link, formData.link_text));
             setFormData((prev) => ({
@@ -223,7 +229,8 @@ function Card(props) {
                 original_title: prev.title,
             }));
             setIsLearnMoreEditMode(true);
-        } else if (!shouldBeInEditMode && isLearnMoreEditMode) {
+        } else if (!shouldBeInEditMode && isLearnMoreEditMode && onboardingEditModeRef.current) {
+            onboardingEditModeRef.current = false;
             setIsLearnMoreEditMode(false);
             isEditingRef.current = false;
         }
@@ -962,6 +969,35 @@ function Card(props) {
             }));
         });
         const primaryStyle = ringStyles[0] || style || {};
+
+        // If nothing actually changed in the polygon editor, return to the
+        // learn-more modal without touching formData so the "unsaved changes"
+        // badge doesn't light up. Compare geometry + per-ring styles in a
+        // normalized form (stored vertices may lack per-vertex style fields
+        // and use strings for numeric values).
+        const cardFillColor = formData.polygon_fill_color || '#0077c0';
+        const cardFillOpacity = formData.polygon_fill_opacity != null ? Number(formData.polygon_fill_opacity) : 0.15;
+        const cardLineStyle = formData.polygon_line_style || 'solid';
+        const normalizeVertex = (v) => ({
+            ring: v.ring ?? 0,
+            lat: parseFloat(Number(v.lat).toFixed(6)),
+            lng: parseFloat(Number(v.lng).toFixed(6)),
+            fillColor: v.fillColor || cardFillColor,
+            fillOpacity: v.fillOpacity != null ? Number(v.fillOpacity) : cardFillOpacity,
+            lineStyle: v.lineStyle || cardLineStyle,
+        });
+        const polygonUnchanged = !isConvertingToPolygon &&
+            JSON.stringify((formData.polygon_vertices || []).map(normalizeVertex)) ===
+            JSON.stringify(flatVerts.map(normalizeVertex));
+        if (polygonUnchanged) {
+            setIsEditingPolygon(false);
+            // Ensure learn-more modal stays in edit mode
+            isEditingRef.current = true;
+            setIsLearnMoreEditMode(true);
+            restoreCardPolygonLayers();
+            return;
+        }
+
         setFormData(prev => ({
             ...prev,
             polygon_vertices: flatVerts,
@@ -974,6 +1010,7 @@ function Card(props) {
         setIsEditingPolygon(false);
         setIsConvertingToPolygon(false);
         // Ensure learn-more modal stays in edit mode
+        isEditingRef.current = true;
         setIsLearnMoreEditMode(true);
 
         // Restore card polygon layer visibility
@@ -1013,43 +1050,86 @@ function Card(props) {
                 const sourceId = `card-polygon-${cardID}`;
                 const fillLayerId = `card-polygon-fill-${cardID}`;
                 const lineLayerId = `card-polygon-line-${cardID}`;
-                // Group flat vertices by ring and build MultiPolygon coordinates
+                // Group flat vertices by ring, keeping each ring's own style
                 const ringMap = new Map();
                 for (const v of flatVerts) {
                     const r = v.ring ?? 0;
-                    if (!ringMap.has(r)) ringMap.set(r, []);
-                    ringMap.get(r).push([parseFloat(v.lng), parseFloat(v.lat)]);
+                    if (!ringMap.has(r)) {
+                        ringMap.set(r, {
+                            coords: [],
+                            style: { fillColor: v.fillColor, fillOpacity: v.fillOpacity, lineStyle: v.lineStyle }
+                        });
+                    }
+                    ringMap.get(r).coords.push([parseFloat(v.lng), parseFloat(v.lat)]);
                 }
-                const ringCoords = [...ringMap.entries()]
+                // One feature per ring with per-ring style properties — must match the
+                // data-driven structure renderCardPolygons() builds in Content1.js,
+                // otherwise all rings collapse to a single color/opacity until reload.
+                const ringFeatures = [...ringMap.entries()]
                     .sort(([a], [b]) => a - b)
-                    .map(([, pts]) => { const c = [...pts]; c.push(c[0]); return c; });
+                    .map(([ringIndex, data]) => {
+                        const coords = [...data.coords, data.coords[0]];
+                        const style = data.style || {};
+                        return {
+                            type: 'Feature',
+                            properties: {
+                                ring: ringIndex,
+                                fillColor: style.fillColor || fillColor,
+                                fillOpacity: style.fillOpacity ?? primaryStyle.fillOpacity ?? 0.2,
+                                lineStyle: style.lineStyle || primaryStyle.lineStyle || 'solid',
+                            },
+                            geometry: { type: 'Polygon', coordinates: [coords] }
+                        };
+                    });
 
                 const source = map.getSource(sourceId);
                 if (source) {
-                    source.setData({
-                        type: 'Feature',
-                        geometry: { type: 'MultiPolygon', coordinates: ringCoords.map(c => [c]) }
-                    });
+                    source.setData({ type: 'FeatureCollection', features: ringFeatures });
                 }
 
-                const fillOpacity = primaryStyle.fillOpacity ?? 0.2;
+                // Keep paint properties data-driven so each ring retains its own
+                // color/opacity instead of flattening to the primary style.
+                const dataDrivenColor = ['coalesce', ['get', 'fillColor'], fillColor];
                 if (map.getLayer(fillLayerId)) {
-                    map.setPaintProperty(fillLayerId, 'fill-color', fillColor);
-                    map.setPaintProperty(fillLayerId, 'fill-opacity', fillOpacity);
+                    map.setPaintProperty(fillLayerId, 'fill-color', dataDrivenColor);
+                    map.setPaintProperty(fillLayerId, 'fill-opacity', ['coalesce', ['get', 'fillOpacity'], 0.2]);
                 }
-                if (map.getLayer(lineLayerId)) {
-                    map.setPaintProperty(lineLayerId, 'line-color', fillColor);
-                }
-                // Also recolor the per-style border line layers.
-                ['-solid', '-dashed', '-dotted', '-dashdot'].forEach(suffix => {
+                // Recolor the legacy single line layer and every existing per-style layer.
+                ['', '-solid', '-dashed', '-dotted', '-dashdot'].forEach(suffix => {
                     const styleLineId = `${lineLayerId}${suffix}`;
                     if (map.getLayer(styleLineId)) {
-                        map.setPaintProperty(styleLineId, 'line-color', fillColor);
+                        map.setPaintProperty(styleLineId, 'line-color', dataDrivenColor);
                     }
                 });
+                // A ring may have switched to a line style that has no layer yet
+                // (Content1 only creates layers for styles present at load time) —
+                // create any missing per-style border layers.
+                if (map.getSource(sourceId)) {
+                    const LINE_STYLE_DASH = { solid: [], dashed: [4, 3], dotted: [1, 2], dashdot: [4, 2, 1, 2] };
+                    const stylesPresent = new Set(ringFeatures.map(f => f.properties.lineStyle || 'solid'));
+                    stylesPresent.forEach(styleKey => {
+                        const styleLineId = `${lineLayerId}-${styleKey}`;
+                        if (map.getLayer(styleLineId)) return;
+                        const dash = LINE_STYLE_DASH[styleKey] || [];
+                        const paint = {
+                            'line-color': dataDrivenColor,
+                            'line-width': 2,
+                        };
+                        if (styleKey !== 'solid' && dash.length > 0) {
+                            paint['line-dasharray'] = dash;
+                        }
+                        map.addLayer({
+                            id: styleLineId,
+                            type: 'line',
+                            source: sourceId,
+                            filter: ['==', ['coalesce', ['get', 'lineStyle'], 'solid'], styleKey],
+                            paint,
+                        });
+                    });
+                }
             }
         }
-    }, [formData.cardID, formData.location_type, formData.polygon_fill_color, getRepresentativeImageUrl, preview, props.cardID, restoreCardPolygonLayers, thumbnail]);
+    }, [formData.cardID, formData.location_type, formData.polygon_fill_color, formData.polygon_fill_opacity, formData.polygon_line_style, formData.polygon_vertices, isConvertingToPolygon, getRepresentativeImageUrl, preview, props.cardID, restoreCardPolygonLayers, thumbnail]);
 
     const handlePolygonEditCancel = useCallback(() => {
         // If was converting from marker to polygon, revert location_type
