@@ -1,9 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import Modal from 'react-modal';
 
 function ChangelogModal({ isOpen, onClose }) {
-    const [activeTab, setActiveTab] = useState('latest');
-
     return (
         <Modal
             isOpen={isOpen}
@@ -15,25 +13,30 @@ function ChangelogModal({ isOpen, onClose }) {
                 <h2>What's New</h2>
                 <button className="changelog-modal-close" onClick={onClose} aria-label="Close">x</button>
             </div>
-            
-            <div className="changelog-modal-tabs">
-                <button 
-                    className={`changelog-tab ${activeTab === 'latest' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('latest')}
-                >
-                    Latest Update
-                </button>
-                <button 
-                    className={`changelog-tab ${activeTab === 'future' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('future')}
-                >
-                    Future Works
-                </button>
-            </div>
 
             <div className="changelog-modal-body">
-                {activeTab === 'latest' && (
-                    <>
+                <>
+                        <h3>Update Date: 7/1 - 7/15/2026</h3>
+
+                        <h4>Onboarding & What's New</h4>
+                        <ul className="changelog-list">
+                          <li>The Welcome to Living Atlas onboarding modal now opens automatically when you visit the homepage, and now includes an introduction to the app and an overview of its major features.</li>
+                          <li>The What's New changelog modal no longer opens automatically on page visit; instead, a notification dot now appears on the bell icon when new updates are available, and clears once the changelog has been viewed.</li>
+                        </ul>
+
+                        <h4>Map Interactions</h4>
+                        <ul className="changelog-list">
+                          <li>Added a hover effect to user-added polygons and image overlays on the map, styled after the card marker hover shadow; the effect stays on while a shape's embedded popup is open.</li>
+                        </ul>
+
+                        <h4>Bug Fixes</h4>
+                        <ul className="changelog-list">
+                          <li>Fixed an issue in the Draw Polygon modal where clicking Clear All or Delete This Polygon could not clear the polygon borders from the map.</li>
+                          <li>Fixed an issue in the Draw Polygon modal where polygons were not displayed correctly after clicking Clear All and then Undo; all polygons are now fully restored.</li>
+                          <li>Fixed an issue where clicking Save in the Draw Polygon modal returned to the Learn More modal with edit mode exited prematurely; also improved the unsaved-changes indicator so it only appears when actual changes were made.</li>
+                          <li>Fixed an issue where, immediately after saving changes to a card with multiple polygons, the map rendered all polygons with the same color and opacity until the page was refreshed.</li>
+                        </ul>
+
                         <h3>Update Date: 6/16 - 6/30/2026</h3>
 
                         <h4>Chatbot Knowledge Base Expansion</h4>
@@ -131,41 +134,6 @@ function ChangelogModal({ isOpen, onClose }) {
                           <li>Updated User Manual, onboarding tutorials, and chatbot knowledge base for all new features and changes.</li>
                         </ul>
                     </>
-                )}
-
-                {activeTab === 'future' && (
-                    <>
-                        <h3>Future Works</h3>
-                        <h4>Chatbot (Production Release)</h4>
-                        <ul className="changelog-list">
-                          <li>Integrate ArcGIS knowledge base: Query ArcGIS services database to retrieve REST endpoint information and provide answers to ArcGIS-related questions.</li>
-                          <li>Integrate card knowledge base: Access card data in the database to extract and share relevant information in chatbot responses.</li>
-                          <li>Conversation history: Enable users to view, manage, and delete past conversations. Each session maintains independent context.</li>
-                          <li>Agent capabilities: Enhance chatbot to assist users with specific tasks, such as locating and adding layers to the map.</li>
-                          <li>Performance improvements: Reduce response latency and improve answer accuracy.</li>
-                        </ul>
-
-                        <h4>ArcGIS Upload Panel</h4>
-                        <ul className="changelog-list">
-                          <li>Support for additional ArcGIS database content and services.</li>
-                        </ul>
-
-                        <h4>Custom Layer Panel</h4>
-                        <ul className="changelog-list">
-                          <li>Add more user-customization options for modifying panel content and behavior.</li>
-                        </ul>
-
-                        <h4>Left Sidebar</h4>
-                        <ul className="changelog-list">
-                          <li>Expand app settings with global configuration options (e.g., theme style preferences).</li>
-                        </ul>
-
-                                                <h4>Map Controls</h4>
-                                                <ul className="changelog-list">
-                                                    <li>Continue expanding fullscreen mode with additional accessibility and panel interaction improvements.</li>
-                                                </ul>
-                    </>
-                )}
             </div>
 
             <div className="changelog-modal-footer">

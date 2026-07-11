@@ -26,6 +26,22 @@ function ChangelogHistory() {
             <div className="changelog-history-body">
                 {activeTab === 'latest' && (
                     <>
+                        <h3>Update Date: 7/1 - 7/15/2026</h3>
+
+                        <h4>Onboarding & What's New</h4>
+                        <p>The Welcome to Living Atlas onboarding modal now opens automatically when you visit the homepage, and now includes an introduction to the app and an overview of its major features.</p>
+                        <p>The What's New changelog modal no longer opens automatically on page visit; instead, a notification dot now appears on the bell icon when new updates are available, and clears once the changelog has been viewed.</p>
+
+                        <h4>Map Interactions</h4>
+                        <p>Added a hover effect to user-added polygons and image overlays on the map, styled after the card marker hover shadow; the effect stays on while a shape's embedded popup is open.</p>
+
+                        <h4>Bug Fixes</h4>
+                        <p>Fixed an issue in the Draw Polygon modal where clicking Clear All or Delete This Polygon could not clear the polygon borders from the map.</p>
+                        <p>Fixed an issue in the Draw Polygon modal where polygons were not displayed correctly after clicking Clear All and then Undo; all polygons are now fully restored.</p>
+                        <p>Fixed an issue where clicking Save in the Draw Polygon modal returned to the Learn More modal with edit mode exited prematurely; also improved the unsaved-changes indicator so it only appears when actual changes were made.</p>
+                        <p>Fixed an issue where, immediately after saving changes to a card with multiple polygons, the map rendered all polygons with the same color and opacity until the page was refreshed.</p>
+                        <hr />
+
                         <h3>Update Date: 6/16 - 6/30/2026</h3>
 
                         <h4>Chatbot Knowledge Base Expansion</h4>
