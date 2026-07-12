@@ -35,7 +35,12 @@ function ChangelogHistory() {
                         <h4>Map Interactions</h4>
                         <p>Added a hover effect to user-added polygons and image overlays on the map, styled after the card marker hover shadow; the effect stays on while a shape's embedded popup is open.</p>
 
+                        <h4>Add Points & Draw Polygon Panels</h4>
+                        <p>Added an editing toolbar to the Add Points panel, styled after the Draw Polygon modal, with tools for adding new points, marker color, opacity, move, rotate, scale, undo/redo, and Clear All.</p>
+                        <p>Moved the Draw Polygon modal's Add New Polygon action from the bottom button row to the first position in the editing toolbar.</p>
+
                         <h4>Bug Fixes</h4>
+                        <p>Fixed the misaligned update notification dot that appeared at the top of the left sidebar instead of on the corner of the bell icon.</p>
                         <p>Fixed an issue in the Draw Polygon modal where clicking Clear All or Delete This Polygon could not clear the polygon borders from the map.</p>
                         <p>Fixed an issue in the Draw Polygon modal where polygons were not displayed correctly after clicking Clear All and then Undo; all polygons are now fully restored.</p>
                         <p>Fixed an issue where clicking Save in the Draw Polygon modal returned to the Learn More modal with edit mode exited prematurely; also improved the unsaved-changes indicator so it only appears when actual changes were made.</p>
