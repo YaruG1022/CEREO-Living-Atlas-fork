@@ -2,7 +2,7 @@ import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from
 import ReactDOM from 'react-dom';
 import mapboxgl from 'mapbox-gl';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faHand, faRotate, faUpRightAndDownLeftFromCenter, faRotateLeft, faRotateRight, faTrash, faShapes, faPalette } from '@fortawesome/free-solid-svg-icons';
+import { faHand, faRotate, faUpRightAndDownLeftFromCenter, faRotateLeft, faRotateRight, faTrash, faShapes, faPalette, faPlus } from '@fortawesome/free-solid-svg-icons';
 import { HexColorPicker } from 'react-colorful';
 import './PolygonDrawingModal.css';
 
@@ -2513,6 +2513,19 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
                     <button
                         type="button"
                         className="polygon-draw-style-btn"
+                        title="Add New Polygon"
+                        disabled={vertices.length < 3}
+                        onClick={handleNewPolygon}
+                    >
+                        <FontAwesomeIcon icon={faPlus} style={{ fontSize: 15, width: 16, height: 16 }} />
+                    </button>
+                </div>
+                )}
+                {!isImageMode && (
+                <div className="polygon-draw-style-btn-wrap">
+                    <button
+                        type="button"
+                        className="polygon-draw-style-btn"
                         title="Line Style"
                         onClick={() => { setShowLineMenu(v => !v); setShowColorMenu(false); setShowOpacityMenu(false); }}
                     >
@@ -3012,16 +3025,6 @@ const PolygonDrawingModal = ({ onSave, onCancel, initialVertices, initialLineSty
                         onClick={handleFinishDrawing}
                     >
                         Finish Drawing
-                    </button>
-                )}
-                {!isImageMode && isDrawing && vertices.length >= 3 && (
-                    <button
-                        type="button"
-                        className="polygon-draw-modal-btn polygon-draw-modal-btn-new-polygon"
-                        onClick={handleNewPolygon}
-                        title="Finish this polygon and start drawing a new separate one"
-                    >
-                        + New Polygon
                     </button>
                 )}
                 {!isImageMode && !isDrawing && (

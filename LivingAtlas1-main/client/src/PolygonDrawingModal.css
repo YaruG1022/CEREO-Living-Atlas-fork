@@ -391,17 +391,6 @@
     background: #555;
 }
 
-.polygon-draw-modal-btn-new-polygon {
-    background: #2563eb;
-    color: #fff;
-    border-color: #2563eb;
-}
-
-.polygon-draw-modal-btn-new-polygon:hover:not(:disabled) {
-    background: #1d4ed8;
-    border-color: #1d4ed8;
-}
-
 /* ── Multi-ring group styles ───────────────────────────── */
 .polygon-ring-group {
     border: 1px solid #d1d5db;
