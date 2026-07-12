@@ -60,8 +60,9 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
     const [showOpacityMenu, setShowOpacityMenu] = useState(false);
 
     // Active tool mode (mutually exclusive): 'add' | 'move' | 'rotate' | 'scale' | null.
-    // Points can only be added by clicking the map while 'add' is active.
-    const [activeMode, setActiveMode] = useState('add');
+    // Points can only be added by clicking the map while 'add' is active; the
+    // user must explicitly enable it via the toolbar's "Add Points" button.
+    const [activeMode, setActiveMode] = useState(null);
 
     // Undo / redo stacks of { points, color, opacity }
     const [history, setHistory] = useState([]);
@@ -342,7 +343,7 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
         saveToHistoryRef.current?.();
         setPoints([]);
         setOpenIconPicker(null);
-        setActiveMode('add');
+        setActiveMode(null);
     };
 
     // Align the panel's top with the "Add card from map" map control button so it
@@ -407,7 +408,9 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
                                 ? 'Drag to rotate points around their center'
                                 : activeMode === 'scale'
                                     ? 'Drag to scale points from their center'
-                                    : 'Drag points to adjust'}
+                                    : points.length > 0
+                                        ? 'Drag points to adjust'
+                                        : 'Use the + tool to add points'}
                 </span>
             </div>
 

@@ -13,7 +13,7 @@ import api from './api.js';
 import PolygonDrawingModal from './PolygonDrawingModal';
 import html2canvas from 'html2canvas';
 import { icon } from '@fortawesome/fontawesome-svg-core';
-import { faEye, faEyeSlash, faCamera, faImage, faLocationDot, faPlus, faDrawPolygon } from '@fortawesome/free-solid-svg-icons';
+import { faEye, faEyeSlash, faCamera, faImage, faLocationDot, faPencil, faDrawPolygon } from '@fortawesome/free-solid-svg-icons';
 import { buildMarkerIconElement } from './markerIcons';
 
 // Mapbox Token
@@ -819,7 +819,7 @@ const Content1 = (props) => {
         addToolsBtn.setAttribute('data-onboarding-target', 'map-control-add-cards');
         addToolsBtn.title = 'Add card from map';
         addToolsBtn.type = 'button';
-        addToolsBtn.innerHTML = icon(faPlus).html[0];
+        addToolsBtn.innerHTML = icon(faPencil).html[0];
 
         const addToolsMenu = document.createElement('div');
         addToolsMenu.className = 'map-add-tools-menu';
@@ -856,6 +856,18 @@ const Content1 = (props) => {
         const toggleAddToolsMenu = (e) => {
           e.preventDefault();
           e.stopPropagation();
+          // If a placement panel (add points / draw polygon / place image) is
+          // open, close it and open the options menu instead of toggling.
+          const openPanel = map.getContainer().querySelector('.polygon-draw-modal');
+          if (openPanel) {
+            setIsPolygonToolDrawing(false);
+            setIsImageToolDrawing(false);
+            window.dispatchEvent(new CustomEvent('map-add-tools-cancel-placement'));
+            isAddToolsMenuOpen = true;
+            addToolsMenu.classList.add('open');
+            addToolsBtn.classList.add('active');
+            return;
+          }
           isAddToolsMenuOpen = !isAddToolsMenuOpen;
           addToolsMenu.classList.toggle('open', isAddToolsMenuOpen);
           addToolsBtn.classList.toggle('active', isAddToolsMenuOpen);

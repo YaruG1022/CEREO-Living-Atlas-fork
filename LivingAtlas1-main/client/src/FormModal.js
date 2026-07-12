@@ -76,6 +76,19 @@ const FormModal = (props) => {
         return () => window.removeEventListener('map-image-tool-cancel', handleImageToolCancel);
     }, []);
 
+    // Fired by the map "Add card from map" button: close any placement panel
+    // this modal launched (add points / draw polygon / place image) so the
+    // options menu can take over.
+    useEffect(() => {
+        const handler = () => {
+            if (isPlacingMultipoint) handleMultipointCancel();
+            if (isDrawingPolygon) setIsDrawingPolygon(false);
+            if (isPlacingImageOverlay) setIsPlacingImageOverlay(false);
+        };
+        window.addEventListener('map-add-tools-cancel-placement', handler);
+        return () => window.removeEventListener('map-add-tools-cancel-placement', handler);
+    });
+
     const handleCloseModal = () => {
         setModalIsOpen(false);
         setIsDrawingPolygon(false);
