@@ -39,6 +39,12 @@ function ChangelogHistory() {
                         <p>Added an editing toolbar to the Add Points panel, styled after the Draw Polygon modal, with tools for adding new points, marker color, opacity, move, rotate, scale, undo/redo, and Clear All.</p>
                         <p>Moved the Draw Polygon modal's Add New Polygon action from the bottom button row to the first position in the editing toolbar.</p>
 
+                        <h4>Chatbot Agent Skill Upgrade</h4>
+                        <p>Added a modular chatbot agent skill framework to the backend chat pipeline, enabling tool-style live data retrieval before response generation.</p>
+                        <p>Added an ArcGIS live catalog skill that queries <code>https://gis.ecology.wa.gov/serverext/rest/services</code> and supports folder-level drill-down queries (for example, AQ/WQ/WR).</p>
+                        <p>Enhanced explainability by appending structured source snippets in chatbot answers (e.g., <code>[ArcGIS live catalog]</code> entries in a Sources section).</p>
+                        <p>Improved reliability for ArcGIS live fetches with 403 mitigation logic, including request-header profiles, endpoint fallback attempts, and clearer diagnostics.</p>
+
                         <h4>Bug Fixes</h4>
                         <p>Fixed the misaligned update notification dot that appeared at the top of the left sidebar instead of on the corner of the bell icon.</p>
                         <p>Fixed an issue in the Draw Polygon modal where clicking Clear All or Delete This Polygon could not clear the polygon borders from the map.</p>

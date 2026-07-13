@@ -35,6 +35,14 @@ function ChangelogModal({ isOpen, onClose }) {
                           <li>Moved the Draw Polygon modal's Add New Polygon action from the bottom button row to the first position in the editing toolbar.</li>
                         </ul>
 
+                        <h4>Chatbot Agent Skill Upgrade</h4>
+                        <ul className="changelog-list">
+                          <li>Added a modular chatbot agent skill framework to the backend chat pipeline, enabling tool-style live data retrieval before response generation.</li>
+                          <li>Added an ArcGIS live catalog skill that queries <code>https://gis.ecology.wa.gov/serverext/rest/services</code> and supports folder-level drill-down queries (for example, AQ/WQ/WR).</li>
+                          <li>Enhanced explainability by appending structured source snippets in chatbot answers (e.g., <code>[ArcGIS live catalog]</code> entries in a Sources section).</li>
+                          <li>Improved reliability for ArcGIS live fetches with 403 mitigation logic, including request-header profiles, endpoint fallback attempts, and clearer diagnostics.</li>
+                        </ul>
+
                         <h4>Bug Fixes</h4>
                         <ul className="changelog-list">
                           <li>Fixed the misaligned update notification dot that appeared at the top of the left sidebar instead of on the corner of the bell icon.</li>
