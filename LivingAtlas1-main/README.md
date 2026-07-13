@@ -29,6 +29,9 @@
     - `https://gis.ecology.wa.gov/serverext/rest/services`
 - Optional env var to override source URL:
     - `ARCGIS_REST_SERVICES_URL`
+- Optional env var for fallback base URLs (comma-separated):
+    - `ARCGIS_REST_SERVICES_FALLBACK_URLS`
+    - Example: `https://gis.ecology.wa.gov/server/rest/services`
 - The skill is triggered automatically for ArcGIS/service/layer/folder-related questions and injects live catalog context into chatbot answers.
 
 

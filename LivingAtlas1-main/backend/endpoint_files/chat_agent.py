@@ -9,7 +9,7 @@ import os
 import re
 import time
 from dataclasses import dataclass
-from typing import List
+from typing import List, Tuple
 from urllib.parse import quote
 
 import requests
@@ -42,6 +42,7 @@ class ArcGISServiceCatalogSkill(BaseSkill):
     def __init__(self) -> None:
         # endpoint_key -> (timestamp, payload)
         self._cache = {}
+        self._resolved_base_url = ""
 
     def can_handle(self, question: str) -> bool:
         lowered = question.lower()
@@ -79,24 +80,74 @@ class ArcGISServiceCatalogSkill(BaseSkill):
             "https://gis.ecology.wa.gov/serverext/rest/services",
         ).strip().rstrip("/")
 
-    def _fetch_json(self, endpoint_key: str, url: str) -> dict:
+    def _candidate_base_urls(self) -> List[str]:
+        base = self._base_url()
+        fallbacks = [u.strip().rstrip("/") for u in os.environ.get("ARCGIS_REST_SERVICES_FALLBACK_URLS", "").split(",") if u.strip()]
+
+        candidates: List[str] = [base]
+        if "/serverext/rest/services" in base:
+            candidates.append(base.replace("/serverext/rest/services", "/server/rest/services"))
+        if "/server/rest/services" in base:
+            candidates.append(base.replace("/server/rest/services", "/serverext/rest/services"))
+
+        candidates.extend(fallbacks)
+
+        seen = set()
+        deduped = []
+        for c in candidates:
+            if c and c not in seen:
+                deduped.append(c)
+                seen.add(c)
+        return deduped
+
+    def _header_profiles(self) -> List[dict]:
+        # Some ArcGIS gateways are stricter for default python-requests headers.
+        return [
+            {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+                "Accept": "application/json,text/plain,*/*",
+                "Referer": "https://gis.ecology.wa.gov/",
+            },
+            {
+                "User-Agent": "LivingAtlasChatbot/1.0 (+https://cereo.wsu.edu/)",
+                "Accept": "application/json,*/*",
+            },
+        ]
+
+    def _fetch_json(self, endpoint_key: str, path_suffix: str = "") -> dict:
         now = time.time()
         cached = self._cache.get(endpoint_key)
         if cached and (now - cached[0]) < self._CACHE_TTL_SECONDS:
             return cached[1]
 
-        response = requests.get(url, params={"f": "pjson"}, timeout=10)
-        response.raise_for_status()
-        payload = response.json()
-        self._cache[endpoint_key] = (now, payload)
-        return payload
+        errors: List[str] = []
+
+        for base in self._candidate_base_urls():
+            url = f"{base}{path_suffix}"
+            for headers in self._header_profiles():
+                try:
+                    response = requests.get(url, params={"f": "pjson"}, timeout=12, headers=headers)
+                    if response.status_code == 403:
+                        errors.append(f"403 at {url} (ua={headers.get('User-Agent', 'n/a')[:30]}...)")
+                        continue
+                    response.raise_for_status()
+                    payload = response.json()
+                    self._cache[endpoint_key] = (now, payload)
+                    self._resolved_base_url = base
+                    return payload
+                except requests.RequestException as req_exc:
+                    errors.append(f"{type(req_exc).__name__} at {url}: {req_exc}")
+
+        if errors:
+            raise RuntimeError("; ".join(errors[:5]))
+        raise RuntimeError("ArcGIS live catalog request failed for unknown reason")
 
     def _fetch_root_catalog(self) -> dict:
-        return self._fetch_json("root", self._base_url())
+        return self._fetch_json("root")
 
     def _fetch_folder_catalog(self, folder: str) -> dict:
         safe_folder = "/".join(quote(part, safe="") for part in folder.split("/"))
-        return self._fetch_json(f"folder:{folder}", f"{self._base_url()}/{safe_folder}")
+        return self._fetch_json(f"folder:{folder}", f"/{safe_folder}")
 
     def _pick_folder_targets(self, question: str, folders: List[str], terms: List[str]) -> List[str]:
         lowered = question.lower()
@@ -168,6 +219,7 @@ class ArcGISServiceCatalogSkill(BaseSkill):
             for folder in folder_targets:
                 try:
                     folder_payload = self._fetch_folder_catalog(folder)
+                    effective_base = self._resolved_base_url or self._base_url()
                     folder_services = folder_payload.get("services") or []
                     if not isinstance(folder_services, list):
                         folder_services = []
@@ -190,7 +242,7 @@ class ArcGISServiceCatalogSkill(BaseSkill):
                         )
 
                         source_snippets.append(
-                            f"[ArcGIS live catalog] folder endpoint: {self._base_url()}/{folder}"
+                            f"[ArcGIS live catalog] folder endpoint: {effective_base}/{folder}"
                         )
                         first_name, first_type = preview[0]
                         source_snippets.append(
@@ -205,14 +257,15 @@ class ArcGISServiceCatalogSkill(BaseSkill):
                         f"- Folder '{folder}' drill-down request failed: {folder_exc}"
                     )
 
+            effective_base = self._resolved_base_url or self._base_url()
             lines = [
                 "ArcGIS REST services catalog (live):",
-                f"- Source: {os.environ.get('ARCGIS_REST_SERVICES_URL', 'https://gis.ecology.wa.gov/serverext/rest/services')}",
+                f"- Source: {effective_base}",
                 f"- Total folders: {len(folders)}",
                 f"- Total root services: {len(services)}",
             ]
             source_snippets.append(
-                f"[ArcGIS live catalog] root endpoint: {self._base_url()}"
+                f"[ArcGIS live catalog] root endpoint: {effective_base}"
             )
 
             if matched_folders:
