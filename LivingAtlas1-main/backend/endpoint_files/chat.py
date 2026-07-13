@@ -13,10 +13,12 @@ import psycopg2
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from openai import APIConnectionError, APITimeoutError, OpenAI, OpenAIError
+from endpoint_files.chat_agent import build_default_chat_agent
 
 chat_router = APIRouter(prefix="/chat", tags=["chat"])
 _LOCAL_EMBEDDER = None
 _LOCAL_EMBEDDER_NAME = None
+_CHAT_AGENT = build_default_chat_agent()
 
 # ---------------------------------------------------------------------------
 # System prompt: gives the model context about the Living Atlas project
@@ -26,7 +28,7 @@ Regional Water Center (RWC) Living Atlas web application — an interactive map
 that showcases environmental datasets, GIS layers, and research resources for
 the Pacific Northwest (Idaho, Oregon, and Washington).
 
-Answer the user's question using the reference documentation and live card data provided below.
+Answer the user's question using the reference documentation, live card data, and skill outputs provided below.
 If the documentation does not cover the question, say so honestly — do not invent information.
 Be concise, friendly, and factual.
 Do not answer questions unrelated to the Living Atlas or environmental/GIS topics.
@@ -310,6 +312,7 @@ def ask(payload: ChatRequest):
 
     doc_context = get_relevant_docs(question)
     card_context = get_card_context(question)
+    skill_context = _CHAT_AGENT.build_skill_context(question)
 
     context_sections = []
     if doc_context:
@@ -318,6 +321,8 @@ def ask(payload: ChatRequest):
         context_sections.append(
             "=== LIVE CARD DATA (PUBLIC, NON-SENSITIVE) ===\n" + card_context
         )
+    if skill_context:
+        context_sections.append("=== LIVE SKILL OUTPUTS ===\n" + skill_context)
 
     if context_sections:
         system_prompt = SYSTEM_PROMPT_BASE + "\n\n" + "\n\n".join(context_sections)

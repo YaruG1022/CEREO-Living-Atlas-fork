@@ -23,6 +23,14 @@
 - In 2nd terminal navigate to the /LivingAtlas1/backend folder
     - Use `uvicorn main:app --reload`
 
+### Chatbot Agent Skill (ArcGIS Live Catalog)
+- The `/chat/ask` endpoint now includes a lightweight agent layer with skills.
+- The first enabled skill fetches live ArcGIS service catalog data from:
+    - `https://gis.ecology.wa.gov/serverext/rest/services`
+- Optional env var to override source URL:
+    - `ARCGIS_REST_SERVICES_URL`
+- The skill is triggered automatically for ArcGIS/service/layer/folder-related questions and injects live catalog context into chatbot answers.
+
 
 ---
 **Developed by Students at WSU**
