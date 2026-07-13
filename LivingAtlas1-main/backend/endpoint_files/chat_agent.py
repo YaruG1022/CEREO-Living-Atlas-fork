@@ -58,7 +58,8 @@ class ArcGISServiceCatalogSkill(BaseSkill):
         return any(word in lowered for word in trigger_words)
 
     def _extract_terms(self, question: str) -> List[str]:
-        words = re.findall(r"[a-zA-Z]{3,}", question.lower())
+        # Include 2+ char tokens so short folder names like AQ/WQ/WR are captured.
+        words = re.findall(r"[a-zA-Z][a-zA-Z0-9_]{1,}", question.lower())
         stop = {
             "what", "which", "show", "list", "about", "with", "from", "that",
             "arcgis", "service", "services", "layer", "layers", "folder", "rest",
@@ -105,6 +106,7 @@ class ArcGISServiceCatalogSkill(BaseSkill):
             f_lower = str(folder).lower()
             explicit = (
                 f"folder {f_lower}" in lowered
+                or f"{f_lower} folder" in lowered
                 or f"in {f_lower}" in lowered
                 or f"under {f_lower}" in lowered
             )
@@ -276,6 +278,11 @@ class ChatAgent:
 
         if warnings:
             print("[chat-agent] warnings:", " | ".join(warnings))
+            blocks.append(
+                "=== SKILL WARNINGS ===\n"
+                + "\n".join(f"- {warning}" for warning in warnings)
+                + "\n- If a live skill warning exists, do NOT claim live catalog data was retrieved."
+            )
 
         return "\n\n".join(blocks)
 
