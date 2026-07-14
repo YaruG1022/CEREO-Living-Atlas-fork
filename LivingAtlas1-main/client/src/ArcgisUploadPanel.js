@@ -1199,6 +1199,17 @@ function ArcgisUploadPanel({
         return () => window.removeEventListener('arcgis-layer-toggle', handler);
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // Keep pinned items in sync when pins are toggled elsewhere (e.g. the card
+    // learn-more modal), so this panel's own saves don't overwrite them.
+    useEffect(() => {
+        const handler = (e) => {
+            const items = normalizePinnedItems(e.detail?.pinnedItems);
+            setPinnedItems(items);
+        };
+        window.addEventListener('arcgis-pinned-items-changed', handler);
+        return () => window.removeEventListener('arcgis-pinned-items-changed', handler);
+    }, []);
+
     // Process pending direct toggles (triggered by directToggleTick or when serviceLayers updates)
     useEffect(() => {
         if (pendingDirectTogglesRef.current.length === 0) return;

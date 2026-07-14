@@ -1837,6 +1837,44 @@
     accent-color: #2563eb;
 }
 
+/* Pin button on the left of each linked ArcGIS item */
+.learn-more-arcgis-pin-btn {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: none !important;
+    border: 1px solid #cbd5e1 !important;
+    color: #94a3b8 !important;
+    width: 24px !important;
+    height: 24px !important;
+    min-width: 24px !important;
+    border-radius: 4px !important;
+    cursor: pointer !important;
+    font-size: 0.75rem !important;
+    line-height: 1 !important;
+    padding: 0 !important;
+    flex-shrink: 0 !important;
+    align-self: center !important;
+    transition: background 0.12s, color 0.12s, border-color 0.12s !important;
+    box-shadow: none !important;
+}
+
+.learn-more-arcgis-pin-btn:hover {
+    background: #f1f5f9 !important;
+    color: #334155 !important;
+    border-color: #94a3b8 !important;
+}
+
+.learn-more-arcgis-pin-btn.pinned {
+    color: #2f6fb0 !important;
+    border-color: #b9d0e6 !important;
+    background: #f6faff !important;
+}
+
+.learn-more-arcgis-pin-btn.pinned:hover {
+    background: #e8f1fa !important;
+}
+
 /* Checkbox label wrapper for linked ArcGIS layer toggle */
 .learn-more-arcgis-layer-toggle-label {
     display: flex;
@@ -1845,13 +1883,48 @@
     cursor: pointer;
 }
 
+/* Styled to match the upload panel's layer checkboxes
+   (.upload-panel input[type="checkbox"] in ArcgisUploadPanel.css). */
 .learn-more-arcgis-layer-toggle-cb {
-    width: 15px;
-    height: 15px;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border: 1.5px solid #888;
+    border-radius: 1px;
+    background: #fff;
     cursor: pointer;
-    accent-color: #2563eb;
+    position: relative;
+    flex-shrink: 0;
     margin: 0;
     margin-right: 6px;
+    padding: 0;
+    vertical-align: middle;
+}
+
+.learn-more-arcgis-layer-toggle-cb:checked {
+    background: #fff;
+    border-color: #666;
+}
+
+.learn-more-arcgis-layer-toggle-cb:checked::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    right: 2px;
+    bottom: 2px;
+    background: #888;
+}
+
+.learn-more-arcgis-layer-toggle-cb:hover {
+    border-color: #555;
+}
+
+.learn-more-arcgis-layer-toggle-cb:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
 }
 
 /* Single inline row: breadcrumb + legend img + name */

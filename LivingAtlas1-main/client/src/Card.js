@@ -6,9 +6,10 @@ import api from './api.js';
 import { fetchArcgisLegend } from './arcgisDataUtils';
 import './Card.css';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faHeart as solidHeart, faMagnifyingGlass, faPenToSquare, faTrashCan, faDownload } from '@fortawesome/free-solid-svg-icons';
+import { faHeart as solidHeart, faMagnifyingGlass, faPenToSquare, faTrashCan, faDownload, faThumbtack } from '@fortawesome/free-solid-svg-icons';
 import { jsPDF } from 'jspdf';
 import { faHeart as regularHeart, faQuestionCircle, faCirclePlay } from '@fortawesome/free-regular-svg-icons';
+import { fetchUserPreferences, saveUserPreferences } from './userPreferencesApi';
 import PolygonDrawingModal from './PolygonDrawingModal';
 import ArcGISPickerModal from './ArcGISPickerModal';
 import LearnMoreOnboarding, { LEARN_MORE_EDIT_MODE_STEP } from './OnboardingLearnMore';
@@ -36,6 +37,26 @@ _allArcgisServices.forEach(s => {
     ARCGIS_SERVICE_LABEL_BY_KEY[s.key] = s.label || s.key;
     ARCGIS_SERVICE_URL_BY_KEY[s.key] = s.url || null;
 });
+
+// Pinned ArcGIS items live in the same user-preference list
+// (preferences.arcgis.pinnedItems) used by the ArcGIS upload panel, so pinned
+// layers persist in the database and auto-load with the panel's pin system.
+function normalizePinnedArcgisItems(items) {
+    if (!Array.isArray(items)) return [];
+    return items
+        .filter(i => i && typeof i === 'object' && typeof i.serviceKey === 'string' && i.serviceKey.trim())
+        .map(i => ({
+            serviceKey: i.serviceKey.trim(),
+            layerId: i.layerId ?? null,
+            sublayerIndex: i.sublayerIndex ?? null,
+        }));
+}
+
+function pinMatchesLinkedItem(pin, item) {
+    return pin.serviceKey === item.service_key
+        && (pin.layerId ?? null) === (item.layer_id ?? null)
+        && (pin.sublayerIndex ?? null) === (item.sublayer_index ?? null);
+}
 
 function parseLinks(link, linkText) {
     if (!link) return [{ url: '', text: '' }];
@@ -86,6 +107,10 @@ function Card(props) {
     const [isArcgisPickerOpen, setIsArcgisPickerOpen] = useState(false);
     // Track which linked items have their layer shown on the map (keyed by item.id)
     const [linkedArcgisChecked, setLinkedArcgisChecked] = useState({});
+    // Pinned ArcGIS items (shared with the upload panel via user preferences / DB)
+    const [pinnedArcgisItems, setPinnedArcgisItems] = useState([]);
+    const pinnedArcgisLoadedRef = useRef(false);
+    const pinnedAutoOpenedRef = useRef(false);
     const linkedItemsLoadedRef = useRef(null); // tracks which cardID was last loaded
     const linkedArcgisItemsBackupRef = useRef(null); // backup of linkedArcgisItems when edit mode starts
     const [learnMoreLinks, setLearnMoreLinks] = useState([{ url: '', text: '' }]);
@@ -160,6 +185,75 @@ function Card(props) {
         });
     }, [linkedArcgisItems]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // Load pinned ArcGIS items from user preferences when the learn-more modal opens
+    useEffect(() => {
+        if (!isModalOpen) {
+            pinnedArcgisLoadedRef.current = false;
+            pinnedAutoOpenedRef.current = false;
+            return;
+        }
+        if (pinnedArcgisLoadedRef.current) return;
+        pinnedArcgisLoadedRef.current = true;
+        const email = localStorage.getItem('email') || '';
+        if (!email) {
+            setPinnedArcgisItems([]);
+            return;
+        }
+        fetchUserPreferences(email)
+            .then(prefs => setPinnedArcgisItems(normalizePinnedArcgisItems(prefs?.arcgis?.pinnedItems)))
+            .catch(() => {});
+    }, [isModalOpen]);
+
+    // Pinned linked layers always stay open: force-show them once per modal open
+    useEffect(() => {
+        if (!isModalOpen || pinnedAutoOpenedRef.current) return;
+        if (linkedArcgisItems.length === 0 || pinnedArcgisItems.length === 0) return;
+        pinnedAutoOpenedRef.current = true;
+        const pinnedLinked = linkedArcgisItems.filter(item =>
+            pinnedArcgisItems.some(pin => pinMatchesLinkedItem(pin, item))
+        );
+        if (pinnedLinked.length === 0) return;
+        setLinkedArcgisChecked(prev => {
+            const nextState = { ...prev };
+            pinnedLinked.forEach(item => { nextState[item.id] = true; });
+            return nextState;
+        });
+        pinnedLinked.forEach(item => {
+            window.dispatchEvent(new CustomEvent('arcgis-layer-toggle', {
+                detail: { serviceKey: item.service_key, layerId: item.layer_id, checked: true },
+            }));
+        });
+    }, [isModalOpen, linkedArcgisItems, pinnedArcgisItems]);
+
+    const handleToggleArcgisPin = (item) => {
+        const email = localStorage.getItem('email') || '';
+        if (!props.isLoggedIn || !email) {
+            setShowLoginPrompt(true);
+            return;
+        }
+        const isPinnedNow = pinnedArcgisItems.some(pin => pinMatchesLinkedItem(pin, item));
+        const next = isPinnedNow
+            ? pinnedArcgisItems.filter(pin => !pinMatchesLinkedItem(pin, item))
+            : [...pinnedArcgisItems, {
+                serviceKey: item.service_key,
+                layerId: item.layer_id ?? null,
+                sublayerIndex: item.sublayer_index ?? null,
+            }];
+        setPinnedArcgisItems(next);
+        saveUserPreferences(email, { arcgis: { pinnedItems: next } })
+            .catch(err => console.warn('Failed to save pinned ArcGIS preferences:', err));
+        // Keep the upload panel's pin state in sync if it's mounted
+        window.dispatchEvent(new CustomEvent('arcgis-pinned-items-changed', {
+            detail: { pinnedItems: next },
+        }));
+        if (!isPinnedNow) {
+            // Newly pinned layers always stay open on the map
+            setLinkedArcgisChecked(prev => ({ ...prev, [item.id]: true }));
+            window.dispatchEvent(new CustomEvent('arcgis-layer-toggle', {
+                detail: { serviceKey: item.service_key, layerId: item.layer_id, checked: true },
+            }));
+        }
+    };
     // Ensure username and name always have safe defaults
     // Now handled by handleEdit
     /* useEffect(() => {
@@ -2328,7 +2422,8 @@ function Card(props) {
                                     const stateLabel = ARCGIS_STATE_FULL_NAMES[item.state_code] || item.state_code;
                                     const isServiceLevel = item.item_type === 'service';
                                     const serviceLabel = ARCGIS_SERVICE_LABEL_BY_KEY[item.service_key] || item.service_key;
-                                    const isLayerChecked = !!linkedArcgisChecked[item.id];
+                                    const isPinnedItem = pinnedArcgisItems.some(pin => pinMatchesLinkedItem(pin, item));
+                                    const isLayerChecked = isPinnedItem || !!linkedArcgisChecked[item.id];
 
                                     // Resolve legend image for this item
                                     const legendImg = (() => {
@@ -2352,11 +2447,27 @@ function Card(props) {
 
                                     return (
                                         <li key={item.id} className="learn-more-arcgis-link-item">
-                                            <label className="learn-more-arcgis-layer-toggle-label" title="Show/hide this layer on the map">
+                                            <button
+                                                type="button"
+                                                className={`learn-more-arcgis-pin-btn${isPinnedItem ? ' pinned' : ''}`}
+                                                title={isPinnedItem
+                                                    ? 'Unpin — layer no longer stays open automatically'
+                                                    : 'Pin — keep this layer always open'}
+                                                onClick={() => handleToggleArcgisPin(item)}
+                                            >
+                                                <FontAwesomeIcon icon={faThumbtack} />
+                                            </button>
+                                            <label
+                                                className="learn-more-arcgis-layer-toggle-label"
+                                                title={isPinnedItem
+                                                    ? 'Pinned layers always stay open (unpin to hide)'
+                                                    : 'Show/hide this layer on the map'}
+                                            >
                                                 <input
                                                     type="checkbox"
                                                     className="learn-more-arcgis-layer-toggle-cb"
                                                     checked={isLayerChecked}
+                                                    disabled={isPinnedItem}
                                                     onChange={() => {
                                                         const nowChecked = !isLayerChecked;
                                                         setLinkedArcgisChecked(prev => ({ ...prev, [item.id]: nowChecked }));
