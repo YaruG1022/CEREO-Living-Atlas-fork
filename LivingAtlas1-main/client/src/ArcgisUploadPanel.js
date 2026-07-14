@@ -3129,6 +3129,9 @@ function ArcgisUploadPanel({
                             
                             return (
                                 <div>
+                                    <div className="arcgis-service-info-row">
+                                        <strong>Service Name:</strong> {(currentService && currentService.label) || info.mapName || info.name || '—'}
+                                    </div>
                                     {info.serviceDescription || info.description ? (
                                         <div className="arcgis-service-info-row">
                                             <strong>Service Description:</strong>
