@@ -482,7 +482,7 @@ function CustomLayersPanel({
                         map,
                         { ...layer, serviceKey: `custom-${service.key}`, serviceUrl: service.url },
                         showArcgisPopup,
-                        { minzoom: 6 }
+                        { minzoom: 5 }
                     );
                 }
             });
@@ -540,14 +540,14 @@ function CustomLayersPanel({
                                     type: 'raster',
                                     tiles: [getArcgisTileUrl(service.url, [layerId])],
                                     tileSize: 256,
-                                    minzoom: 6,
+                                    minzoom: 5,
                                     maxzoom: 12
                                 });
                                 map.addLayer({
                                     id: sublayerLayerId,
                                     type: 'raster',
                                     source: sublayerSourceId,
-                                    minzoom: 6,
+                                    minzoom: 5,
                                     paint: { 'raster-opacity': layerOpacity }
                                 });
                             });
@@ -562,14 +562,14 @@ function CustomLayersPanel({
                         type: 'raster',
                         tiles: [getArcgisTileUrl(service.url, [layerId])],
                         tileSize: 256,
-                        minzoom: 6,
+                        minzoom: 5,
                         maxzoom: 12
                     });
                     map.addLayer({
                         id: rasterLayerId,
                         type: 'raster',
                         source: rasterSourceId,
-                        minzoom: 6,
+                        minzoom: 5,
                         paint: { 'raster-opacity': layerOpacity }
                     });
                 }

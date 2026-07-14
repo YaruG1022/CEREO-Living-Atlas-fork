@@ -1208,6 +1208,15 @@ function ArcgisUploadPanel({
             const layers = serviceLayers[serviceKey];
             if (layers === undefined) {
                 stillPending.push({ serviceKey, layerId, checked });
+                // Show the map loading spinner right away — the layer list is
+                // still being fetched (e.g. pinned layers auto-loading on page
+                // visit via the learn-more modal).
+                if (checked) {
+                    addLoadingMessage(
+                        `direct-pending-${serviceKey}-${layerId ?? 'all'}`,
+                        `Loading ${service.label}...`
+                    );
+                }
                 // Kick off layer loading so we can apply the toggle once they arrive
                 fetchArcgisLayers(service.url)
                     .then(loaded => {
@@ -1219,7 +1228,8 @@ function ArcgisUploadPanel({
                     .catch(() => setServiceLayers(prev => ({ ...prev, [serviceKey]: [] })));
                 return;
             }
-            // Layers available — apply toggle
+            // Layers available — apply toggle (clear the pending-fetch spinner first)
+            removeLoadingMessage(`direct-pending-${serviceKey}-${layerId ?? 'all'}`);
             if (layerId != null) {
                 if (checked) {
                     setCheckedLayerIds(prev => {
@@ -1781,7 +1791,7 @@ function ArcgisUploadPanel({
                         map,
                         { ...layer, serviceKey: service.key, serviceUrl: service.url },
                         showArcgisPopup,
-                        { minzoom: 6 }
+                        { minzoom: 5 }
                     );
                     vectorAddedIds.add(id);
                 }
@@ -1858,7 +1868,7 @@ function ArcgisUploadPanel({
                                     type: 'raster',
                                     tiles: [sublayerTileUrl],
                                     tileSize: 256,
-                                    minzoom: 6,
+                                    minzoom: 5,
                                     maxzoom: 12
                                 });
 
@@ -1866,7 +1876,7 @@ function ArcgisUploadPanel({
                                     id: sublayerLayerId,
                                     type: 'raster',
                                     source: sublayerSourceId,
-                                    minzoom: 6,
+                                    minzoom: 5,
                                     paint: {
                                         'raster-opacity': layerOpacity
                                     }
@@ -1923,7 +1933,7 @@ function ArcgisUploadPanel({
                         type: 'raster',
                         tiles: [getArcgisTileUrl(service.url, [layerId])],
                         tileSize: 256,
-                        minzoom: 6,
+                        minzoom: 5,
                         maxzoom: 12
                     });
 
@@ -1931,7 +1941,7 @@ function ArcgisUploadPanel({
                         id: rasterLayerId,
                         type: 'raster',
                         source: rasterSourceId,
-                        minzoom: 6,
+                        minzoom: 5,
                         paint: {
                             'raster-opacity': layerOpacity
                         }

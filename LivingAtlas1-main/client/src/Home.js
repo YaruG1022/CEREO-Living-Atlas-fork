@@ -1085,7 +1085,7 @@ function Home(props) {
                 `https://gis.ecology.wa.gov/serverext/rest/services/Authoritative/AQ/MapServer/export?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=256,256&format=png&transparent=true&f=image${layersParam}`
             ],
             tileSize: 256,
-            minzoom: 6,
+            minzoom: 5,
             maxzoom: 12
         });
         map.addLayer({

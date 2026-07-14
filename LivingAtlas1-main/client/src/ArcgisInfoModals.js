@@ -170,10 +170,10 @@ function applyServiceTimeFilterOnMap(map, mapKey, service, timeRange, fallbackOp
                 type: 'raster',
                 tiles: [newTile],
                 tileSize: 256,
-                minzoom: 6,
+                minzoom: 5,
                 maxzoom: 12
             });
-            map.addLayer({ id: layerId, type: 'raster', source: sourceId, minzoom: 6, paint: { 'raster-opacity': opacity } });
+            map.addLayer({ id: layerId, type: 'raster', source: sourceId, minzoom: 5, paint: { 'raster-opacity': opacity } });
         });
 }
 
@@ -974,7 +974,7 @@ export function LayerInfoModal({
 
                             {/* Zoom visibility range (dual-handle slider: min & max zoom level) */}
                             {(() => {
-                                const zr = zoomRangeByKey[cacheKey] || { min: 6, max: 22 };
+                                const zr = zoomRangeByKey[cacheKey] || { min: 5, max: 22 };
                                 const minPct = (zr.min / 22) * 100;
                                 const maxPct = (zr.max / 22) * 100;
                                 const setZoomRange = (next) => {
