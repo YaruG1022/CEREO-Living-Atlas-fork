@@ -81,7 +81,9 @@ export async function fetchArcgisLegend(serviceUrl) {
 }
 
 // Get tile URL for a given service and layer IDs
-export function getArcgisTileUrl(serviceUrl, layerIds = [], timeRange = null) {
+// layerDefs: optional { [layerId]: whereClause } applied server-side so the
+// exported raster only renders matching features.
+export function getArcgisTileUrl(serviceUrl, layerIds = [], timeRange = null, layerDefs = null) {
     let layersParam = '';
     if (layerIds.length > 0) {
         layersParam = '&layers=show:' + layerIds.join(',');
@@ -90,7 +92,11 @@ export function getArcgisTileUrl(serviceUrl, layerIds = [], timeRange = null) {
     if (timeRange && timeRange.startMs != null && timeRange.endMs != null) {
         timeParam = `&time=${timeRange.startMs},${timeRange.endMs}`;
     }
-    return `${serviceUrl}/export?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=256,256&format=png&transparent=true&f=image${layersParam}${timeParam}`;
+    let layerDefsParam = '';
+    if (layerDefs && Object.keys(layerDefs).length > 0) {
+        layerDefsParam = `&layerDefs=${encodeURIComponent(JSON.stringify(layerDefs))}`;
+    }
+    return `${serviceUrl}/export?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=256,256&format=png&transparent=true&f=image${layersParam}${timeParam}${layerDefsParam}`;
 }
 
 // Fetch the service info (service root page) from ArcGIS REST (e.g. .../MapServer?f=json)

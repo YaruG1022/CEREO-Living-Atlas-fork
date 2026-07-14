@@ -96,6 +96,47 @@ function applyLayerZoomRangeOnMap(map, mapKey, arcgisLayerId, minZoom, maxZoom) 
     });
 }
 
+// Swap the layerDefs param on an export tile URL (string manipulation — the
+// URL contains the literal {bbox-epsg-3857} template, so the URL API would
+// break it by percent-encoding the braces).
+function withLayerDefs(tileUrl, arcgisLayerId, whereClause) {
+    let url = tileUrl.replace(/&layerDefs=[^&]*/, '');
+    if (whereClause && whereClause !== '1=1') {
+        url += `&layerDefs=${encodeURIComponent(JSON.stringify({ [arcgisLayerId]: whereClause }))}`;
+    }
+    return url;
+}
+
+// Apply a where-clause filter to the raster tiles of a layer by re-creating
+// its sources with an ArcGIS `layerDefs` export param, so the server only
+// renders matching features. Pass '1=1' (or null) to clear.
+function applyLayerRasterFilterOnMap(map, mapKey, arcgisLayerId, whereClause) {
+    const style = map.getStyle();
+    if (!style || !Array.isArray(style.layers)) return;
+    const layerBase = `arcgis-raster-layer-${mapKey}-${arcgisLayerId}`;
+    style.layers
+        .filter(l => l.id === layerBase || l.id.startsWith(`${layerBase}-`))
+        .forEach(mapLayer => {
+            const sourceId = mapLayer.source;
+            const sourceDef = style.sources?.[sourceId];
+            if (!map.getLayer(mapLayer.id) || !map.getSource(sourceId)) return;
+            if (!sourceDef || sourceDef.type !== 'raster' || !Array.isArray(sourceDef.tiles) || sourceDef.tiles.length === 0) return;
+
+            const newTiles = sourceDef.tiles.map(t => withLayerDefs(t, arcgisLayerId, whereClause));
+            if (newTiles.every((t, i) => t === sourceDef.tiles[i])) return; // no change
+
+            const layerId = mapLayer.id;
+            const opacity = map.getPaintProperty(layerId, 'raster-opacity');
+            map.removeLayer(layerId);
+            map.removeSource(sourceId);
+            map.addSource(sourceId, { ...sourceDef, tiles: newTiles });
+            const layerSpec = { id: layerId, type: 'raster', source: sourceId, paint: { 'raster-opacity': opacity ?? 1 } };
+            if (mapLayer.minzoom != null) layerSpec.minzoom = mapLayer.minzoom;
+            if (mapLayer.maxzoom != null) layerSpec.maxzoom = mapLayer.maxzoom;
+            map.addLayer(layerSpec);
+        });
+}
+
 // Re-create the raster sources of a service with a time-range parameter.
 // timeRange = { startMs, endMs } or null to clear.
 function applyServiceTimeFilterOnMap(map, mapKey, service, timeRange, fallbackOpacity) {
@@ -118,11 +159,15 @@ function applyServiceTimeFilterOnMap(map, mapKey, service, timeRange, fallbackOp
             if (isNaN(arcgisLayerId)) return;
 
             const opacity = map.getPaintProperty(layerId, 'raster-opacity') ?? fallbackOpacity;
+            // Preserve any active layerDefs (field filter) from the old tile URL
+            const oldTile = (style.sources?.[sourceId]?.tiles || [])[0] || '';
+            const layerDefsMatch = oldTile.match(/&layerDefs=[^&]*/);
+            const newTile = getArcgisTileUrl(service.url, [arcgisLayerId], timeRange) + (layerDefsMatch ? layerDefsMatch[0] : '');
             map.removeLayer(layerId);
             map.removeSource(sourceId);
             map.addSource(sourceId, {
                 type: 'raster',
-                tiles: [getArcgisTileUrl(service.url, [arcgisLayerId], timeRange)],
+                tiles: [newTile],
                 tileSize: 256,
                 minzoom: 6,
                 maxzoom: 12
@@ -1059,6 +1104,8 @@ export function LayerInfoModal({
                                                                     mapKey,
                                                                     whereClause
                                                                 );
+                                                                // Also filter the raster tiles server-side (layerDefs)
+                                                                applyLayerRasterFilterOnMap(map, mapKey, layerInfo.layerId, whereClause);
                                                             }
                                                             showMessage?.(`Filter applied: ${whereClause}`);
                                                         }
@@ -1090,6 +1137,8 @@ export function LayerInfoModal({
                                                                 mapKey,
                                                                 '1=1'
                                                             );
+                                                            // Restore unfiltered raster tiles
+                                                            applyLayerRasterFilterOnMap(map, mapKey, layerInfo.layerId, null);
                                                         }
                                                         setLayerFilter(null);
                                                         showMessage?.('Filter cleared');
