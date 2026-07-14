@@ -2373,8 +2373,8 @@ function ArcgisUploadPanel({
                 layerId: layerInfoOpen.layerId
             };
             await saveCustomLayer(email, layerToSave);
-            showFinishedMessage(`Saved "${layerInfoOpen.layerName}" to Custom Layers`);
             onCustomLayerSaved?.();
+            return `Saved "${layerInfoOpen.layerName}" to Custom Layers`;
         } catch (err) {
             alert(`Failed to save: ${err.message}`);
         }
@@ -2392,8 +2392,8 @@ function ArcgisUploadPanel({
             const currentService = ARCGIS_SERVICES.find(s => s.key === serviceInfoOpenKey);
             if (!currentService) return;
             await saveCustomLayer(email, currentService);
-            showFinishedMessage(`Saved "${currentService.label}" to Custom Layers`);
             onCustomLayerSaved?.();
+            return `Saved "${currentService.label}" to Custom Layers`;
         } catch (err) {
             alert(`Failed to save: ${err.message}`);
         }

@@ -1241,7 +1241,7 @@ function CustomLayersPanel({
                 layerId: layerInfoOpen.layerId
             };
             await saveCustomLayer(email, layerToSave);
-            alert(`Successfully saved "${layerInfoOpen.layerName}" to Custom Layers`);
+            return `Saved "${layerInfoOpen.layerName}" to Custom Layers`;
         } catch (err) {
             alert(`Failed to save: ${err.message}`);
         }
@@ -1258,7 +1258,7 @@ function CustomLayersPanel({
             const currentService = customServices.find(s => s.key === serviceInfoOpenKey);
             if (!currentService) return;
             await saveCustomLayer(email, currentService);
-            alert(`Successfully saved "${currentService.label}" to Custom Layers`);
+            return `Saved "${currentService.label}" to Custom Layers`;
         } catch (err) {
             alert(`Failed to save: ${err.message}`);
         }

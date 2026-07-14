@@ -10,8 +10,9 @@
 // null when closed) so their per-service/per-layer UI state persists across
 // open/close, matching the panels' previous behavior.
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faFloppyDisk, faSquare, faDownload } from '@fortawesome/free-solid-svg-icons';
+import { faFloppyDisk, faSquare, faDownload, faCircleCheck } from '@fortawesome/free-solid-svg-icons';
 import { getArcgisTileUrl } from './arcgisDataUtils';
 import { applyArcgisVectorLayerFilter } from './arcgisVectorUtils';
 
@@ -191,6 +192,24 @@ const SAVE_BTN_STYLE = {
     whiteSpace: 'nowrap',
 };
 
+// Centered confirmation modal shown after a successful save (auto-dismisses).
+function SaveSuccessModal({ message, onClose }) {
+    useEffect(() => {
+        const timer = setTimeout(onClose, 2600);
+        return () => clearTimeout(timer);
+    }, [onClose]);
+    return createPortal(
+        <div className="arcgis-save-success-overlay" onClick={onClose}>
+            <div className="arcgis-save-success-modal" role="alertdialog" onClick={e => e.stopPropagation()}>
+                <FontAwesomeIcon icon={faCircleCheck} className="arcgis-save-success-icon" />
+                <div className="arcgis-save-success-text">{message}</div>
+                <button type="button" className="arcgis-save-success-btn" onClick={onClose}>OK</button>
+            </div>
+        </div>,
+        document.body
+    );
+}
+
 // =====================================================================
 // Service Info Modal
 // =====================================================================
@@ -215,11 +234,18 @@ export function ServiceInfoModal({
     const [timeInputByKey, setTimeInputByKey] = usePersistentState(onboardingPrefix, 'timeInputByKey', {});
     const [timelineByKey, setTimelineByKey] = usePersistentState(onboardingPrefix, 'timelineByKey', {});
     const [timeFilterByKey, setTimeFilterByKey] = usePersistentState(onboardingPrefix, 'timeFilterByKey', {});
+    const [saveSuccessMsg, setSaveSuccessMsg] = useState(null);
 
     if (!serviceKey) return null;
 
     const mapKey = `${mapKeyPrefix}${serviceKey}`;
     const getMap = () => (mapInstance && mapInstance());
+
+    // onSave resolves to a success message string (or falsy on failure)
+    const handleSaveClick = async () => {
+        const msg = await onSave?.();
+        if (msg) setSaveSuccessMsg(typeof msg === 'string' ? msg : 'Saved to Custom Layers');
+    };
 
     const applyTimeFilter = (timeRange) => {
         setTimeFilterByKey(prev => ({ ...prev, [serviceKey]: timeRange || null }));
@@ -237,12 +263,12 @@ export function ServiceInfoModal({
             <button
                 type="button"
                 className="arcgis-service-info-save-btn"
-                onClick={onSave}
-                title="Save to Custom Layers"
+                onClick={handleSaveClick}
+                title="Save this service to Custom Layers"
                 style={{ ...SAVE_BTN_STYLE, marginBottom: '12px' }}
             >
                 <FontAwesomeIcon icon={faFloppyDisk} style={{ fontSize: '12px' }} />
-                Save
+                Save Service
             </button>
             <a
                 href={service.url}
@@ -257,6 +283,7 @@ export function ServiceInfoModal({
 
     return (
         <div className="arcgis-service-info-modal" style={getStyle()} data-onboarding-target={`${onboardingPrefix}-service-info-modal`}>
+            {saveSuccessMsg && <SaveSuccessModal message={saveSuccessMsg} onClose={() => setSaveSuccessMsg(null)} />}
             <div className="arcgis-service-info-modal-header">
                 <strong>Service info</strong>
                 <button
@@ -674,6 +701,7 @@ export function LayerInfoModal({
     const [opacityByKey, setOpacityByKey] = usePersistentState(onboardingPrefix, 'layerOpacityByKey', {});
     const [zoomRangeByKey, setZoomRangeByKey] = usePersistentState(onboardingPrefix, 'layerZoomRangeByKey', {});
     const [layerFilter, setLayerFilter] = useState(null);
+    const [saveSuccessMsg, setSaveSuccessMsg] = useState(null);
 
     // Reset the filter inputs whenever the target layer changes / modal closes
     const filterResetKey = layerInfo ? `${layerInfo.serviceKey}-${layerInfo.layerId}` : null;
@@ -686,6 +714,12 @@ export function LayerInfoModal({
     const cacheKey = `${layerInfo.serviceKey}-${layerInfo.layerId}`;
     const mapKey = `${mapKeyPrefix}${layerInfo.serviceKey}`;
     const getMap = () => (mapInstance && mapInstance());
+
+    // onSave resolves to a success message string (or falsy on failure)
+    const handleSaveClick = async () => {
+        const msg = await onSave?.();
+        if (msg) setSaveSuccessMsg(typeof msg === 'string' ? msg : 'Saved to Custom Layers');
+    };
 
     // Download the layer's raster image (ArcGIS export) for the current map view
     const handleDownloadLayerImage = async () => {
@@ -726,6 +760,7 @@ export function LayerInfoModal({
 
     return (
         <div className="arcgis-service-info-modal" style={getStyle()} data-onboarding-target={`${onboardingPrefix}-layer-info-modal`}>
+            {saveSuccessMsg && <SaveSuccessModal message={saveSuccessMsg} onClose={() => setSaveSuccessMsg(null)} />}
             <div className="arcgis-service-info-modal-header">
                 <strong>Layer Info: {layerInfo.layerName}</strong>
                 <button
@@ -1158,12 +1193,12 @@ export function LayerInfoModal({
                                     <button
                                         type="button"
                                         className="arcgis-service-info-save-btn"
-                                        onClick={onSave}
-                                        title="Save to Custom Layers"
+                                        onClick={handleSaveClick}
+                                        title="Save this layer to Custom Layers"
                                         style={SAVE_BTN_STYLE}
                                     >
                                         <FontAwesomeIcon icon={faFloppyDisk} style={{ fontSize: '12px' }} />
-                                        Save
+                                        Save Layer
                                     </button>
                                     {/MapServer|ImageServer/i.test(layerInfo.serviceUrl || '') && (
                                         <button

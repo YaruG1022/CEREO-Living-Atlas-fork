@@ -1008,6 +1008,58 @@
     margin-top: 4px;
 }
 
+/* Centered save-success confirmation modal (shared info modals) */
+.arcgis-save-success-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    z-index: 12000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.arcgis-save-success-modal {
+    background: #fff;
+    border-radius: 8px;
+    padding: 22px 28px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    max-width: 340px;
+    text-align: center;
+}
+
+.arcgis-save-success-icon {
+    color: #2e7d32;
+    font-size: 34px;
+}
+
+.arcgis-save-success-text {
+    font-size: 14px;
+    color: #333;
+    line-height: 1.45;
+    word-break: break-word;
+}
+
+.arcgis-save-success-btn {
+    margin-top: 4px;
+    padding: 6px 24px;
+    background: #1976d2;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.arcgis-save-success-btn:hover {
+    background: #145ea8;
+}
+
 /* Historical view time filter */
 .service-info-time-filter {
     margin-top: 6px;
