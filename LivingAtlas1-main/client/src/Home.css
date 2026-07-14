@@ -339,6 +339,46 @@
     background: #1a252f;
 }
 
+/* Icon chip mimicking the left sidebar buttons, used in onboarding modal text */
+.onboarding-sidebar-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+    border-radius: 6px;
+    background: #2c3e50;
+    color: #fff;
+    font-size: 12px;
+    margin-right: 8px;
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+
+/* Feature list with leading sidebar icons */
+.onboarding-feature-list {
+    list-style: none;
+    padding-left: 0 !important;
+}
+
+.onboarding-feature-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 2px;
+}
+
+.onboarding-feature-list li .onboarding-sidebar-icon {
+    margin-top: 1px;
+}
+
+/* Small inline icon inside sentences (play / question mark / info) */
+.onboarding-inline-icon {
+    font-size: 12px;
+    color: #3f84c2;
+    vertical-align: baseline;
+}
+
 
 
 .main {
