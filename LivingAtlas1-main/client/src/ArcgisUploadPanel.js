@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { addArcgisVectorLayer, applyArcgisVectorLayerFilter } from './arcgisVectorUtils';
+import { addArcgisVectorLayer } from './arcgisVectorUtils';
 import { showArcgisPopup } from './arcgisPopupUtils';
 import {
     fetchArcgisLayers,
@@ -28,6 +28,7 @@ import { filterUploadPanelData } from './arcgisUploadSearchUtils';
 import { buildMatchList, useSearchNav } from './arcgisSearchNavUtils';
 import { buildLayerTree, getAllLeafLayers, getDescendantLeafLayers, LayerTreeNode } from './LayerTree';
 import { useLayerContextMenu, LayerContextMenuPopup } from './LayerContextMenu';
+import { ServiceInfoModal, LayerInfoModal } from './ArcgisInfoModals';
 import { fetchUserPreferences, saveUserPreferences } from './userPreferencesApi';
 import {
     clearPendingLocalPreferences,
@@ -39,7 +40,7 @@ import {
 import './ArcgisUploadPanel.css';
 import './ArcgisUploadPanelStateMenu.css';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faSearch, faTimes, faSync, faChevronUp, faChevronDown, faQuestion, faEllipsisV, faPlay, faSquare, faFloppyDisk, faEye } from '@fortawesome/free-solid-svg-icons';
+import { faSearch, faTimes, faSync, faChevronUp, faChevronDown, faQuestion, faEllipsisV, faPlay, faEye } from '@fortawesome/free-solid-svg-icons';
 import { faFolder } from '@fortawesome/free-regular-svg-icons';
 import {
     useArcgisLoadingMessages,
@@ -88,8 +89,6 @@ const BUILTIN_LAYERS = [
     { id: 'Places', label: 'City Limits' },
 ];
 const BUILTIN_FOLDER_NAME = 'Built-in Layers';
-const EARLIEST_TIMELINE_YEAR = 2000;
-const MONTH_VALUES = [1,2,3,4,5,6,7,8,9,10,11,12];
 const LEGACY_PINNED_STORAGE_KEY = 'arcgis_pinned_items';
 
 function normalizePinnedItems(items) {
@@ -235,15 +234,6 @@ function ArcgisUploadPanel({
 
     // Opacity slider state (0 to 1)
     const [layerOpacity, setLayerOpacity] = useState(0.7);
-    const [serviceInfoOpacityByKey, setServiceInfoOpacityByKey] = useState({});
-    // Time filter state per service: { [serviceKey]: { startMs, endMs } | null }
-    const [serviceTimeFilterByKey, setServiceTimeFilterByKey] = useState({});
-    // UI date inputs per service: { [serviceKey]: { startDate: 'YYYY-MM-DD', endDate: 'YYYY-MM-DD' } }
-    const [serviceTimeInputByKey, setServiceTimeInputByKey] = useState({});
-    // Which time-filter tab is active per service: 'range' | 'timeline'
-    const [serviceTimeTabByKey, setServiceTimeTabByKey] = useState({});
-    // Timeline slider state per service: { year: number|null, month: number|null }
-    const [serviceTimelineByKey, setServiceTimelineByKey] = useState({});
     const panelRootRef = useRef(null);
 
     // Track previous checkedLayerIds for diffing
@@ -341,7 +331,6 @@ function ArcgisUploadPanel({
             setExpandedLayers(new Set());
             setServiceInfoOpenKey(null);
             setLayerInfoOpen(null);
-            setLayerFilter(null);
             return;
         }
 
@@ -477,7 +466,6 @@ function ArcgisUploadPanel({
     const [layerInfoOpen, setLayerInfoOpen] = useState(null); // { serviceKey, layerId, layerName, serviceUrl }
     const [layerInfoCache, setLayerInfoCache] = useState({}); // { "serviceKey-layerId": info }
     const [layerInfoLoading, setLayerInfoLoading] = useState(false);
-    const [layerFilter, setLayerFilter] = useState(null); // { field, operator, value } for current layer filtering
 
     // Add new state for sublayer checkboxes (add this near other state declarations)
     const [checkedSublayerIds, setCheckedSublayerIds] = useState({});
@@ -2011,68 +1999,6 @@ function ArcgisUploadPanel({
         });
     };
 
-    const applyServiceOpacity = useCallback((serviceKey, newOpacity) => {
-        const map = mapInstance && mapInstance();
-        if (!map || !map.getStyle || !serviceKey) return;
-        const style = map.getStyle();
-        if (!style || !Array.isArray(style.layers)) return;
-
-        style.layers.forEach(l => {
-            if (l.id.startsWith(`arcgis-raster-layer-${serviceKey}-`)) {
-                map.setPaintProperty(l.id, 'raster-opacity', newOpacity);
-            } else if (l.id.startsWith(`arcgis-vector-layer-${serviceKey}-`)) {
-                if (l.type === 'fill') {
-                    map.setPaintProperty(l.id, 'fill-opacity', newOpacity);
-                } else if (l.type === 'line') {
-                    map.setPaintProperty(l.id, 'line-opacity', newOpacity);
-                } else if (l.type === 'circle') {
-                    map.setPaintProperty(l.id, 'circle-opacity', newOpacity);
-                }
-            }
-        });
-    }, [mapInstance]);
-
-    // Apply a time range filter to all active map layers of a given service.
-    // timeRange = { startMs, endMs } or null to clear.
-    const applyServiceTimeFilter = useCallback((serviceKey, timeRange) => {
-        setServiceTimeFilterByKey(prev => ({ ...prev, [serviceKey]: timeRange || null }));
-        const map = mapInstance && mapInstance();
-        if (!map || !map.getStyle || !serviceKey) return;
-        const style = map.getStyle();
-        if (!style || !Array.isArray(style.layers)) return;
-
-        const currentService = ARCGIS_SERVICES.find(s => s.key === serviceKey);
-        if (!currentService) return;
-
-        const sourcePrefix = `arcgis-raster-${serviceKey}-`;
-        const layerPrefix = `arcgis-raster-layer-${serviceKey}-`;
-
-        style.layers
-            .filter(l => l.id.startsWith(layerPrefix))
-            .forEach(mapLayer => {
-                const layerId = mapLayer.id;
-                const sourceId = mapLayer.source;
-                if (!map.getLayer(layerId) || !map.getSource(sourceId)) return;
-
-                // Extract ArcGIS numeric layer id from source id, e.g. "arcgis-raster-svc-5" → 5
-                const suffix = sourceId.slice(sourcePrefix.length); // "5" or "5-sub-0"
-                const arcgisLayerId = parseInt(suffix.split('-')[0], 10);
-                if (isNaN(arcgisLayerId)) return;
-
-                const opacity = map.getPaintProperty(layerId, 'raster-opacity') ?? layerOpacity;
-                map.removeLayer(layerId);
-                map.removeSource(sourceId);
-                map.addSource(sourceId, {
-                    type: 'raster',
-                    tiles: [getArcgisTileUrl(currentService.url, [arcgisLayerId], timeRange)],
-                    tileSize: 256,
-                    minzoom: 6,
-                    maxzoom: 12
-                });
-                map.addLayer({ id: layerId, type: 'raster', source: sourceId, minzoom: 6, paint: { 'raster-opacity': opacity } });
-            });
-    }, [mapInstance, layerOpacity]); // eslint-disable-line react-hooks/exhaustive-deps
-
     const INFO_MODAL_WIDTH = 380;
 
     const getInfoModalStyle = () => {
@@ -2454,6 +2380,25 @@ function ArcgisUploadPanel({
         }
     };
 
+    // Save the service currently shown in the service info modal to custom layers
+    const handleSaveServiceFromInfoModal = async () => {
+        if (!serviceInfoOpenKey) return;
+        const email = localStorage.getItem('email') || '';
+        if (!email) {
+            setShowLoginPrompt(true);
+            return;
+        }
+        try {
+            const currentService = ARCGIS_SERVICES.find(s => s.key === serviceInfoOpenKey);
+            if (!currentService) return;
+            await saveCustomLayer(email, currentService);
+            showFinishedMessage(`Saved "${currentService.label}" to Custom Layers`);
+            onCustomLayerSaved?.();
+        } catch (err) {
+            alert(`Failed to save: ${err.message}`);
+        }
+    };
+
     // Open service info modal (fetch & cache)
     const openServiceInfo = async (service) => {
         setServiceInfoOpenKey(service.key);
@@ -2521,7 +2466,6 @@ function ArcgisUploadPanel({
 
     const closeLayerInfo = () => {
         setLayerInfoOpen(null);
-        setLayerFilter(null); // Reset filter when closing modal
     };
 
     useEffect(() => {
@@ -2548,7 +2492,6 @@ function ArcgisUploadPanel({
             }
         } else if (layerInfoOpen) {
             setLayerInfoOpen(null);
-            setLayerFilter(null);
         }
     }, [
         isOnboardingOpen,
@@ -2561,13 +2504,7 @@ function ArcgisUploadPanel({
     ]);
 
     // Helper: convert HTML to plain text (for Service Description)
-    function toPlainText(html) {
-        if (!html) return '';
-        const tmp = document.createElement('div');
-        tmp.innerHTML = html;
-        const text = tmp.textContent || tmp.innerText || '';
-        return text.replace(/\u00A0/g, ' ').trim();
-    }
+    // (moved to shared ArcgisInfoModals)
 
     const renderServiceLayerLinks = (service) => {
         const rawLayers = serviceLayers[service.key] || [];
@@ -3071,883 +3008,37 @@ function ArcgisUploadPanel({
                 )}
             </div>
 
-            {/* Service info modal (right side) */}
-            {serviceInfoOpenKey && (
-                <div className="arcgis-service-info-modal" style={getInfoModalStyle()} data-onboarding-target="arcgis-service-info-modal">
-                    <div className="arcgis-service-info-modal-header">
-                        <strong>Service info</strong>
-                        <button
-                            className="arcgis-service-info-modal-close"
-                            onClick={closeServiceInfo}
-                            aria-label="Close"
-                        >
-                            &times;
-                        </button>
-                    </div>
-                    <div className="arcgis-service-info-modal-content">
-                        {serviceInfoLoading && <div>Loading service info…</div>}
-                        {!serviceInfoLoading && (() => {
-                            const info = serviceInfoCache[serviceInfoOpenKey] || {};
-                            const currentService = ARCGIS_SERVICES.find(s => s.key === serviceInfoOpenKey);
-                            
-                            if (!info || Object.keys(info).length === 0) {
-                                return (
-                                    <div>
-                                        <div className="arcgis-service-info-empty">No information available.</div>
-                                        {currentService && currentService.url && (
-                                            <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #ddd' }}>
-                                                <button
-                                                    type="button"
-                                                    className="arcgis-service-info-save-btn"
-                                                    onClick={handleSaveToCustomLayers}
-                                                    title="Save to Custom Layers"
-                                                    style={{
-                                                        padding: '6px 10px',
-                                                        backgroundColor: '#1976d2',
-                                                        color: '#fff',
-                                                        border: 'none',
-                                                        borderRadius: '4px',
-                                                        cursor: 'pointer',
-                                                        fontSize: '13px',
-                                                        fontWeight: '500',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '4px',
-                                                        whiteSpace: 'nowrap'
-                                                    }}
-                                                >
-                                                    <FontAwesomeIcon icon={faFloppyDisk} style={{ fontSize: '12px' }} />
-                                                    Save
-                                                </button>
-                                                <a 
-                                                    href={currentService.url} 
-                                                    target="_blank" 
-                                                    rel="noopener noreferrer"
-                                                    style={{ color: '#1976d2', textDecoration: 'none', fontSize: '13px' }}
-                                                >
-                                                    View ArcGIS Service Page →
-                                                </a>
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            }
-                            
-                            const sr = info.spatialReference || {};
-                            const srText = sr.latestWkid
-                                ? `WKID ${sr.latestWkid}`
-                                : (sr.wkid ? `WKID ${sr.wkid}` : (sr.wkt ? 'WKT' : '—'));
-                            
-                            return (
-                                <div>
-                                    <div className="arcgis-service-info-row">
-                                        <strong>Service Name:</strong> {(currentService && currentService.label) || info.mapName || info.name || '—'}
-                                    </div>
-                                    {info.serviceDescription || info.description ? (
-                                        <div className="arcgis-service-info-row">
-                                            <strong>Service Description:</strong>
-                                            <div className="arcgis-service-info-description">
-                                                {toPlainText(info.serviceDescription || info.description)}
-                                            </div>
-                                        </div>
-                                    ) : null}
-                                    <div className="arcgis-service-info-row">
-                                        <strong>Service Item Id:</strong> {info.serviceItemId || info.itemId || '—'}
-                                    </div>
-                                    <div className="arcgis-service-info-row">
-                                        <strong>Copyright Text:</strong> {toPlainText(info.copyrightText) || '—'}
-                                    </div>
-                                    <div className="arcgis-service-info-row">
-                                        <strong>Spatial Reference:</strong> {srText}
-                                    </div>
+            {/* Service info modal (right side) — shared component */}
+            <ServiceInfoModal
+                serviceKey={serviceInfoOpenKey}
+                service={serviceInfoOpenKey ? (ARCGIS_SERVICES.find(s => s.key === serviceInfoOpenKey) || null) : null}
+                info={serviceInfoOpenKey ? serviceInfoCache[serviceInfoOpenKey] : null}
+                loading={serviceInfoLoading}
+                getStyle={getInfoModalStyle}
+                onboardingPrefix="arcgis"
+                onClose={closeServiceInfo}
+                mapInstance={mapInstance}
+                defaultOpacity={layerOpacity}
+                renderLayerLinks={renderServiceLayerLinks}
+                onSave={handleSaveServiceFromInfoModal}
+            />
 
-                                    <div className="arcgis-service-info-row service-info-opacity-row" data-onboarding-target="arcgis-service-info-opacity">
-                                        <strong>Service Opacity:</strong>
-                                        <div className="service-info-opacity-controls">
-                                            <input
-                                                type="range"
-                                                min="0"
-                                                max="1"
-                                                step="0.01"
-                                                value={serviceInfoOpacityByKey[serviceInfoOpenKey] ?? layerOpacity}
-                                                onChange={(e) => {
-                                                    const value = parseFloat(e.target.value);
-                                                    setServiceInfoOpacityByKey(prev => ({ ...prev, [serviceInfoOpenKey]: value }));
-                                                    applyServiceOpacity(serviceInfoOpenKey, value);
-                                                }}
-                                                className="service-info-opacity-slider"
-                                                style={{ background: `linear-gradient(to right, #27425d ${(serviceInfoOpacityByKey[serviceInfoOpenKey] ?? layerOpacity) * 100}%, #d8e1ea ${(serviceInfoOpacityByKey[serviceInfoOpenKey] ?? layerOpacity) * 100}%)` }}
-                                            />
-                                            <span className="service-info-opacity-value">{Math.round((serviceInfoOpacityByKey[serviceInfoOpenKey] ?? layerOpacity) * 100)}%</span>
-                                        </div>
-                                    </div>
-
-                                    {currentService && (() => {
-                                        const sKey = serviceInfoOpenKey;
-                                        const activeTab = serviceTimeTabByKey[sKey] || 'range';
-                                        const tl = serviceTimelineByKey[sKey] || {};
-                                        const nowYear = new Date().getFullYear();
-                                        const yearValues = Array.from(
-                                            { length: nowYear - EARLIEST_TIMELINE_YEAR + 1 },
-                                            (_, i) => EARLIEST_TIMELINE_YEAR + i
-                                        );
-                                        const tlYear = tl.year != null ? tl.year : null;
-                                        const tlMonth = tl.month != null ? tl.month : null; // 1-based
-                                        const yearForSlider = tlYear != null ? tlYear : nowYear;
-                                        const monthForSlider = tlMonth != null ? tlMonth : 1;
-                                        const yearSpan = Math.max(1, nowYear - EARLIEST_TIMELINE_YEAR);
-                                        const yearPointerPct = ((yearForSlider - EARLIEST_TIMELINE_YEAR) / yearSpan) * 100;
-                                        const monthPointerPct = ((monthForSlider - 1) / 11) * 100;
-
-                                        const applyTimeline = (year, month) => {
-                                            if (year == null) { applyServiceTimeFilter(sKey, null); return; }
-                                            const startMs = month != null
-                                                ? new Date(year, month - 1, 1).getTime()
-                                                : new Date(year, 0, 1).getTime();
-                                            const endMs = month != null
-                                                ? new Date(year, month, 0, 23, 59, 59).getTime()
-                                                : new Date(year, 11, 31, 23, 59, 59).getTime();
-                                            applyServiceTimeFilter(sKey, { startMs, endMs });
-                                        };
-
-                                        const startTimelineIconDrag = (startEvent, wrapEl, min, max, onValue) => {
-                                            if (!wrapEl) return;
-
-                                            const clamp = (val, low, high) => Math.min(high, Math.max(low, val));
-                                            const resolveClientX = (evt) => {
-                                                if (evt.touches && evt.touches.length > 0) return evt.touches[0].clientX;
-                                                if (evt.changedTouches && evt.changedTouches.length > 0) return evt.changedTouches[0].clientX;
-                                                return evt.clientX;
-                                            };
-
-                                            const updateFromClientX = (clientX) => {
-                                                const rect = wrapEl.getBoundingClientRect();
-                                                if (!rect.width) return;
-                                                const ratio = clamp((clientX - rect.left) / rect.width, 0, 1);
-                                                const nextValue = Math.round(min + ratio * (max - min));
-                                                onValue(clamp(nextValue, min, max));
-                                            };
-
-                                            const onMouseMove = (moveEvent) => {
-                                                moveEvent.preventDefault();
-                                                updateFromClientX(resolveClientX(moveEvent));
-                                            };
-
-                                            const onTouchMove = (moveEvent) => {
-                                                moveEvent.preventDefault();
-                                                updateFromClientX(resolveClientX(moveEvent));
-                                            };
-
-                                            const stopDrag = () => {
-                                                window.removeEventListener('mousemove', onMouseMove);
-                                                window.removeEventListener('mouseup', stopDrag);
-                                                window.removeEventListener('touchmove', onTouchMove);
-                                                window.removeEventListener('touchend', stopDrag);
-                                            };
-
-                                            updateFromClientX(resolveClientX(startEvent));
-
-                                            window.addEventListener('mousemove', onMouseMove);
-                                            window.addEventListener('mouseup', stopDrag);
-                                            window.addEventListener('touchmove', onTouchMove, { passive: false });
-                                            window.addEventListener('touchend', stopDrag);
-                                        };
-
-                                        return (
-                                            <div className="arcgis-service-info-row" data-onboarding-target="arcgis-service-info-time-filter">
-                                                <strong>Historical View:</strong>
-                                                <div className="service-info-time-filter">
-                                                    {/* ── Tabs ── */}
-                                                    <div className="service-info-time-tabs">
-                                                        <button
-                                                            className={`service-info-time-tab${activeTab === 'range' ? ' active' : ''}`}
-                                                            onClick={() => setServiceTimeTabByKey(prev => ({ ...prev, [sKey]: 'range' }))}
-                                                        >Date Range</button>
-                                                        <button
-                                                            className={`service-info-time-tab${activeTab === 'timeline' ? ' active' : ''}`}
-                                                            onClick={() => setServiceTimeTabByKey(prev => ({ ...prev, [sKey]: 'timeline' }))}
-                                                        >Timeline</button>
-                                                    </div>
-
-                                                    {/* ── Date Range tab ── */}
-                                                    {activeTab === 'range' && (<>
-                                                        <div className="service-info-time-row">
-                                                            <label className="service-info-time-label">From</label>
-                                                            <input
-                                                                type="date"
-                                                                className="service-info-time-input"
-                                                                value={(serviceTimeInputByKey[sKey] || {}).startDate || ''}
-                                                                onChange={e => setServiceTimeInputByKey(prev => ({
-                                                                    ...prev,
-                                                                    [sKey]: { ...(prev[sKey] || {}), startDate: e.target.value }
-                                                                }))}
-                                                            />
-                                                            <label className="service-info-time-label">To</label>
-                                                            <input
-                                                                type="date"
-                                                                className="service-info-time-input"
-                                                                value={(serviceTimeInputByKey[sKey] || {}).endDate || ''}
-                                                                onChange={e => setServiceTimeInputByKey(prev => ({
-                                                                    ...prev,
-                                                                    [sKey]: { ...(prev[sKey] || {}), endDate: e.target.value }
-                                                                }))}
-                                                            />
-                                                        </div>
-                                                        <div className="service-info-time-actions">
-                                                            <button
-                                                                className="service-info-time-btn"
-                                                                onClick={() => {
-                                                                    const inp = serviceTimeInputByKey[sKey] || {};
-                                                                    if (!inp.startDate || !inp.endDate) return;
-                                                                    const startMs = new Date(inp.startDate).getTime();
-                                                                    const endMs = new Date(inp.endDate + 'T23:59:59').getTime();
-                                                                    if (isNaN(startMs) || isNaN(endMs) || startMs > endMs) return;
-                                                                    applyServiceTimeFilter(sKey, { startMs, endMs });
-                                                                }}
-                                                            >Apply</button>
-                                                            <button
-                                                                className="service-info-time-btn service-info-time-btn-clear"
-                                                                onClick={() => {
-                                                                    setServiceTimeInputByKey(prev => ({ ...prev, [sKey]: {} }));
-                                                                    applyServiceTimeFilter(sKey, null);
-                                                                }}
-                                                            >Clear</button>
-                                                        </div>
-                                                    </>)}
-
-                                                    {/* ── Timeline tab ── */}
-                                                    {activeTab === 'timeline' && (
-                                                        <div className="service-info-timeline">
-                                                            {/* Year slider */}
-                                                            <div className="service-info-timeline-row">
-                                                                <span className="service-info-timeline-label">Year</span>
-                                                                <div className="service-info-timeline-slider-wrap">
-                                                                    <input
-                                                                        type="range"
-                                                                        className="service-info-timeline-slider"
-                                                                        min={EARLIEST_TIMELINE_YEAR}
-                                                                        max={nowYear}
-                                                                        step={1}
-                                                                        value={yearForSlider}
-                                                                        onChange={e => {
-                                                                            const y = parseInt(e.target.value, 10);
-                                                                            setServiceTimelineByKey(prev => ({
-                                                                                ...prev,
-                                                                                [sKey]: { ...(prev[sKey] || {}), year: y }
-                                                                            }));
-                                                                            applyTimeline(y, tlMonth);
-                                                                        }}
-                                                                        style={{
-                                                                            background: `linear-gradient(to right, #27425d ${yearPointerPct}%, #d8e1ea ${yearPointerPct}%)`
-                                                                        }}
-                                                                    />
-                                                                    <span
-                                                                        className="service-info-timeline-handle-icon"
-                                                                        style={{ left: `calc(${yearPointerPct}% - 6px)` }}
-                                                                        onMouseDown={(e) => {
-                                                                            e.preventDefault();
-                                                                            startTimelineIconDrag(
-                                                                                e,
-                                                                                e.currentTarget.closest('.service-info-timeline-slider-wrap'),
-                                                                                EARLIEST_TIMELINE_YEAR,
-                                                                                nowYear,
-                                                                                (y) => {
-                                                                                    setServiceTimelineByKey(prev => ({
-                                                                                        ...prev,
-                                                                                        [sKey]: { ...(prev[sKey] || {}), year: y }
-                                                                                    }));
-                                                                                    applyTimeline(y, tlMonth);
-                                                                                }
-                                                                            );
-                                                                        }}
-                                                                        onTouchStart={(e) => {
-                                                                            e.preventDefault();
-                                                                            startTimelineIconDrag(
-                                                                                e,
-                                                                                e.currentTarget.closest('.service-info-timeline-slider-wrap'),
-                                                                                EARLIEST_TIMELINE_YEAR,
-                                                                                nowYear,
-                                                                                (y) => {
-                                                                                    setServiceTimelineByKey(prev => ({
-                                                                                        ...prev,
-                                                                                        [sKey]: { ...(prev[sKey] || {}), year: y }
-                                                                                    }));
-                                                                                    applyTimeline(y, tlMonth);
-                                                                                }
-                                                                            );
-                                                                        }}
-                                                                        aria-hidden="true"
-                                                                    >
-                                                                        <FontAwesomeIcon icon={faSquare} />
-                                                                    </span>
-                                                                </div>
-                                                                <span className="service-info-timeline-value">{tlYear != null ? tlYear : nowYear}</span>
-                                                            </div>
-                                                            <div
-                                                                className="service-info-timeline-ticks"
-                                                                style={{ gridTemplateColumns: `repeat(${yearValues.length}, minmax(0, 1fr))` }}
-                                                                aria-hidden="true"
-                                                            >
-                                                                {yearValues.map(y => (
-                                                                    <span key={`year-tick-${y}`} className="service-info-timeline-tick" />
-                                                                ))}
-                                                            </div>
-                                                            <div
-                                                                className="service-info-timeline-year-labels"
-                                                                style={{ gridTemplateColumns: `repeat(${yearValues.length}, minmax(0, 1fr))` }}
-                                                            >
-                                                                {yearValues.map(y => (
-                                                                    <span key={`year-label-${y}`}>
-                                                                        {(y === EARLIEST_TIMELINE_YEAR || y % 5 === 0) ? y : ''}
-                                                                    </span>
-                                                                ))}
-                                                            </div>
-
-                                                            {/* Month slider — always visible once in timeline tab */}
-                                                            <div className="service-info-timeline-row" style={{ marginTop: 8 }}>
-                                                                <span className="service-info-timeline-label">Month</span>
-                                                                <div className="service-info-timeline-slider-wrap">
-                                                                    <input
-                                                                        type="range"
-                                                                        className="service-info-timeline-slider"
-                                                                        min={1}
-                                                                        max={12}
-                                                                        step={1}
-                                                                        value={monthForSlider}
-                                                                        onChange={e => {
-                                                                            const m = parseInt(e.target.value, 10);
-                                                                            const y = tlYear != null ? tlYear : nowYear;
-                                                                            setServiceTimelineByKey(prev => ({
-                                                                                ...prev,
-                                                                                [sKey]: { ...(prev[sKey] || {}), year: y, month: m }
-                                                                            }));
-                                                                            applyTimeline(y, m);
-                                                                        }}
-                                                                        style={{
-                                                                            background: `linear-gradient(to right, #27425d ${monthPointerPct}%, #d8e1ea ${monthPointerPct}%)`
-                                                                        }}
-                                                                    />
-                                                                    <span
-                                                                        className="service-info-timeline-handle-icon"
-                                                                        style={{ left: `calc(${monthPointerPct}% - 6px)` }}
-                                                                        onMouseDown={(e) => {
-                                                                            e.preventDefault();
-                                                                            startTimelineIconDrag(
-                                                                                e,
-                                                                                e.currentTarget.closest('.service-info-timeline-slider-wrap'),
-                                                                                1,
-                                                                                12,
-                                                                                (m) => {
-                                                                                    const y = tlYear != null ? tlYear : nowYear;
-                                                                                    setServiceTimelineByKey(prev => ({
-                                                                                        ...prev,
-                                                                                        [sKey]: { ...(prev[sKey] || {}), year: y, month: m }
-                                                                                    }));
-                                                                                    applyTimeline(y, m);
-                                                                                }
-                                                                            );
-                                                                        }}
-                                                                        onTouchStart={(e) => {
-                                                                            e.preventDefault();
-                                                                            startTimelineIconDrag(
-                                                                                e,
-                                                                                e.currentTarget.closest('.service-info-timeline-slider-wrap'),
-                                                                                1,
-                                                                                12,
-                                                                                (m) => {
-                                                                                    const y = tlYear != null ? tlYear : nowYear;
-                                                                                    setServiceTimelineByKey(prev => ({
-                                                                                        ...prev,
-                                                                                        [sKey]: { ...(prev[sKey] || {}), year: y, month: m }
-                                                                                    }));
-                                                                                    applyTimeline(y, m);
-                                                                                }
-                                                                            );
-                                                                        }}
-                                                                        aria-hidden="true"
-                                                                    >
-                                                                        <FontAwesomeIcon icon={faSquare} />
-                                                                    </span>
-                                                                </div>
-                                                                <span className="service-info-timeline-value">{tlMonth != null ? tlMonth : 1}</span>
-                                                            </div>
-                                                            <div className="service-info-timeline-months">
-                                                                {MONTH_VALUES.map((m, i) => (
-                                                                    <div key={m} className="service-info-timeline-month-item" style={{ left: `calc(${i} / 11 * 100%)` }}>
-                                                                        <div className="service-info-timeline-month-tick" />
-                                                                        <span className="service-info-timeline-month-label">{m}</span>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-
-                                                            <div className="service-info-time-actions" style={{ marginTop: 6 }}>
-                                                                <button
-                                                                    className="service-info-time-btn service-info-time-btn-clear"
-                                                                    onClick={() => {
-                                                                        setServiceTimelineByKey(prev => ({ ...prev, [sKey]: {} }));
-                                                                        applyServiceTimeFilter(sKey, null);
-                                                                    }}
-                                                                >Clear</button>
-                                                            </div>
-                                                        </div>
-                                                    )}
-
-                                                    {/* ── Shared active-filter indicator ── */}
-                                                    {serviceTimeFilterByKey[sKey] && (
-                                                        <div className="service-info-time-active">
-                                                            Time filter active: {new Date(serviceTimeFilterByKey[sKey].startMs).toLocaleDateString()} – {new Date(serviceTimeFilterByKey[sKey].endMs).toLocaleDateString()}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        );
-                                    })()}
-
-                                    {currentService && (
-                                        <div className="arcgis-service-info-row" data-onboarding-target="arcgis-service-info-layer-links">
-                                            <strong>Layers / Sublayers:</strong>
-                                            {renderServiceLayerLinks(currentService)}
-                                        </div>
-                                    )}
-                                    
-                                    {/* Add the ArcGIS service page link at the bottom */}
-                                    {currentService && currentService.url && (
-                                        <div data-onboarding-target="arcgis-service-info-actions" style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px solid #ddd' }}>
-                                            <button
-                                                type="button"
-                                                className="arcgis-service-info-save-btn"
-                                                onClick={handleSaveToCustomLayers}
-                                                title="Save to Custom Layers"
-                                                style={{
-                                                    padding: '6px 10px',
-                                                    backgroundColor: '#1976d2',
-                                                    color: '#fff',
-                                                    border: 'none',
-                                                    borderRadius: '4px',
-                                                    cursor: 'pointer',
-                                                    fontSize: '13px',
-                                                    fontWeight: '500',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '4px',
-                                                    whiteSpace: 'nowrap',
-                                                    marginBottom: '12px'
-                                                }}
-                                            >
-                                                <FontAwesomeIcon icon={faFloppyDisk} style={{ fontSize: '12px' }} />
-                                                Save
-                                            </button>
-                                            <a 
-                                                href={currentService.url} 
-                                                target="_blank" 
-                                                rel="noopener noreferrer"
-                                                style={{ color: '#1976d2', textDecoration: 'none', fontSize: '13px' }}
-                                            >
-                                                View ArcGIS Service Page →
-                            </a>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })()}
-                    </div>
-                </div>
-            )}
-
-            {/* Layer Info Modal */}
-            {layerInfoOpen && (
-                <div className="arcgis-service-info-modal" style={getLayerInfoModalStyle()} data-onboarding-target="arcgis-layer-info-modal">
-                    <div className="arcgis-service-info-modal-header">
-                        <strong>Layer Info: {layerInfoOpen.layerName}</strong>
-                        <button
-                            className="arcgis-service-info-modal-close"
-                            onClick={closeLayerInfo}
-                            aria-label="Close"
-                        >
-                            &times;
-                        </button>
-                    </div>
-                    <div className="arcgis-service-info-modal-content">
-                        {layerInfoLoading && <div>Loading layer info…</div>}
-                        {!layerInfoLoading && (() => {
-                            const cacheKey = `${layerInfoOpen.serviceKey}-${layerInfoOpen.layerId}`;
-                            const info = layerInfoCache[cacheKey];
-                            
-                            if (!info || Object.keys(info).length === 0) {
-                                return (
-                                    <div>
-                                        <div className="arcgis-service-info-empty">No layer information available.</div>
-                                        <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #ddd' }}>
-                                            <a 
-                                                href={`${layerInfoOpen.serviceUrl}/${layerInfoOpen.layerId}`} 
-                                                target="_blank" 
-                                                rel="noopener noreferrer"
-                                                style={{ color: '#1976d2', textDecoration: 'none' }}
-                                            >
-                                                View ArcGIS Layer Page →
-                                            </a>
-                                        </div>
-                                    </div>
-                                );
-                            }
-                            
-                            return (
-                                <div>
-                                    {/* Display various layer info fields if they exist */}
-                                    {info.description && (
-                                        <div className="arcgis-service-info-row">
-                                            <strong>Description:</strong>
-                                            <div className="arcgis-service-info-description">
-                                                {toPlainText(info.description)}
-                                            </div>
-                                        </div>
-                                    )}
-                                    
-                                    {info.name && (
-                                        <div className="arcgis-service-info-row">
-                                            <strong>Layer Name:</strong> {info.name}
-                                        </div>
-                                    )}
-                                    
-                                    {info.type && (
-                                        <div className="arcgis-service-info-row">
-                                            <strong>Geometry Type:</strong> {info.type}
-                                        </div>
-                                    )}
-                                    
-                                    {info.copyrightText && (
-                                        <div className="arcgis-service-info-row">
-                                            <strong>Copyright Text:</strong> {toPlainText(info.copyrightText)}
-                                        </div>
-                                    )}
-                                    
-                                    {info.minScale && (
-                                        <div className="arcgis-service-info-row">
-                                            <strong>Min Scale:</strong> {info.minScale.toLocaleString()}
-                                        </div>
-                                    )}
-                                    
-                                    {info.maxScale && (
-                                        <div className="arcgis-service-info-row">
-                                            <strong>Max Scale:</strong> {info.maxScale.toLocaleString()}
-                                        </div>
-                                    )}
-                                    
-                                    {info.defaultVisibility !== undefined && (
-                                        <div className="arcgis-service-info-row">
-                                            <strong>Default Visibility:</strong> {info.defaultVisibility ? 'Visible' : 'Hidden'}
-                                        </div>
-                                    )}
-                                    
-                                    {info.hasAttachments !== undefined && (
-                                        <div className="arcgis-service-info-row">
-                                            <strong>Has Attachments:</strong> {info.hasAttachments ? 'Yes' : 'No'}
-                                        </div>
-                                    )}
-                                    
-                                    {info.fields && info.fields.length > 0 && (
-                                        <div className="arcgis-service-info-row">
-                                            <strong>Fields:</strong> {info.fields.length} field(s)
-                                            <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
-                                                {info.fields.slice(0, 5).map(field => field.name).join(', ')}
-                                                {info.fields.length > 5 && '...'}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Legend display */}
-                                    {(() => {
-                                        const legend = serviceLegends[layerInfoOpen.serviceKey];
-                                        if (legend && legend.layers) {
-                                            const legendLayer = legend.layers.find(l => l.layerId === layerInfoOpen.layerId);
-                                            if (legendLayer && legendLayer.legend && legendLayer.legend.length > 0) {
-                                                return (
-                                                    <div className="arcgis-service-info-row">
-                                                        <strong>Legend:</strong>
-                                                        <div style={{ marginTop: '8px', paddingLeft: '12px' }}>
-                                                            {legendLayer.legend.map((item, idx) => (
-                                                                <div key={idx} style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                                    {item.imageData && (
-                                                                        <img src={`data:image/png;base64,${item.imageData}`} alt={item.label} style={{ width: '20px', height: '20px' }} />
-                                                                    )}
-                                                                    <span style={{ fontSize: '13px' }}>{item.label || item.value || 'N/A'}</span>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                );
-                                            }
-                                        }
-                                        return null;
-                                    })()}
-
-                                    {/* Parent layer link */}
-                                    {info.parentLayerId !== undefined && info.parentLayerId !== -1 && (() => {
-                                        const rawLayers = serviceLayers[layerInfoOpen.serviceKey] || [];
-                                        const parentLayer = rawLayers.find(l => l.id === info.parentLayerId);
-                                        if (parentLayer) {
-                                            return (
-                                                <div className="arcgis-service-info-row">
-                                                    <strong>Parent Layer:</strong>
-                                                    <button
-                                                        type="button"
-                                                        className="arcgis-service-info-layer-link"
-                                                        onClick={() => openLayerInfo(layerInfoOpen.service, { id: parentLayer.id, name: parentLayer.name })}
-                                                        style={{ marginLeft: '8px' }}
-                                                    >
-                                                        {parentLayer.name}
-                                                    </button>
-                                                </div>
-                                            );
-                                        }
-                                        return null;
-                                    })()}
-
-                                    {/* Child layers links */}
-                                    {(() => {
-                                        const rawLayers = serviceLayers[layerInfoOpen.serviceKey] || [];
-                                        const childFromIds = Array.isArray(info.subLayerIds)
-                                            ? info.subLayerIds
-                                                .map(id => rawLayers.find(l => l.id === id) || { id, name: `Layer ${id}` })
-                                            : [];
-                                        const childFromSubLayers = Array.isArray(info.subLayers)
-                                            ? info.subLayers
-                                                .map(sl => {
-                                                    const subId = sl?.id;
-                                                    if (subId === undefined || subId === null) return null;
-                                                    return rawLayers.find(l => l.id === subId) || { id: subId, name: sl?.name || `Layer ${subId}` };
-                                                })
-                                                .filter(Boolean)
-                                            : [];
-                                        const dedupMap = new Map();
-                                        [...childFromIds, ...childFromSubLayers].forEach((layer) => {
-                                            dedupMap.set(layer.id, layer);
-                                        });
-                                        const childLayers = Array.from(dedupMap.values());
-
-                                        if (childLayers.length > 0) {
-                                            return (
-                                                <div className="arcgis-service-info-row">
-                                                    <strong>Child Layers:</strong>
-                                                    <div style={{ marginTop: '8px', paddingLeft: '12px', maxHeight: '180px', overflowY: 'auto', border: '1px solid #eee', borderRadius: '4px', padding: '8px 8px 2px 12px' }}>
-                                                        {childLayers.map(child => (
-                                                            <div key={child.id} style={{ marginBottom: '6px' }}>
-                                                                <button
-                                                                    type="button"
-                                                                    className="arcgis-service-info-layer-link"
-                                                                    onClick={() => openLayerInfo(layerInfoOpen.service, { id: child.id, name: child.name })}
-                                                                >
-                                                                    {child.name}
-                                                                </button>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            );
-                                        }
-                                        return null;
-                                    })()}
-                                    
-                                    {/* Filter UI */}
-                                    {info.fields && info.fields.length > 0 && (
-                                        <div className="arcgis-service-info-row" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #ddd' }} data-onboarding-target="arcgis-layer-info-filter">
-                                            <strong>Filter by Field:</strong>
-                                            <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                {/* Field selector */}
-                                                <select
-                                                    value={layerFilter?.field || ''}
-                                                    onChange={(e) => setLayerFilter({ ...layerFilter, field: e.target.value })}
-                                                    style={{
-                                                        padding: '6px 8px',
-                                                        borderRadius: '4px',
-                                                        border: '1px solid #ddd',
-                                                        fontSize: '13px',
-                                                        fontFamily: 'inherit'
-                                                    }}
-                                                >
-                                                    <option value="">Select a field...</option>
-                                                    {info.fields.map((field) => (
-                                                        <option key={field.name} value={field.name}>
-                                                            {field.alias || field.name} ({field.type})
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                                
-                                                {/* Operator selector */}
-                                                {layerFilter?.field && (
-                                                    <select
-                                                        value={layerFilter?.operator || '='}
-                                                        onChange={(e) => setLayerFilter({ ...layerFilter, operator: e.target.value })}
-                                                        style={{
-                                                            padding: '6px 8px',
-                                                            borderRadius: '4px',
-                                                            border: '1px solid #ddd',
-                                                            fontSize: '13px',
-                                                            fontFamily: 'inherit'
-                                                        }}
-                                                    >
-                                                        <option value="=">=</option>
-                                                        <option value="!=">!=</option>
-                                                        <option value=">">&gt;</option>
-                                                        <option value=">=">&gt;=</option>
-                                                        <option value="<">&lt;</option>
-                                                        <option value="<=">&lt;=</option>
-                                                        <option value="LIKE">LIKE</option>
-                                                        <option value="IN">IN</option>
-                                                    </select>
-                                                )}
-                                                
-                                                {/* Value input */}
-                                                {layerFilter?.field && (
-                                                    <input
-                                                        type="text"
-                                                        placeholder={layerFilter?.operator === 'IN' ? 'Comma-separated values' : 'Enter value...'}
-                                                        value={layerFilter?.value || ''}
-                                                        onChange={(e) => setLayerFilter({ ...layerFilter, value: e.target.value })}
-                                                        style={{
-                                                            padding: '6px 8px',
-                                                            borderRadius: '4px',
-                                                            border: '1px solid #ddd',
-                                                            fontSize: '13px',
-                                                            fontFamily: 'inherit'
-                                                        }}
-                                                    />
-                                                )}
-                                                
-                                                {/* Apply/Clear buttons */}
-                                                {layerFilter?.field && layerFilter?.value && (
-                                                    <div style={{ display: 'flex', gap: '6px' }}>
-                                                        <button
-                                                            type="button"
-                                                            style={{
-                                                                flex: 1,
-                                                                padding: '6px 10px',
-                                                                backgroundColor: '#28a745',
-                                                                color: '#fff',
-                                                                border: 'none',
-                                                                borderRadius: '4px',
-                                                                cursor: 'pointer',
-                                                                fontSize: '13px',
-                                                                fontWeight: '500'
-                                                            }}
-                                                            onClick={() => {
-                                                                const field = layerFilter.field;
-                                                                const operator = layerFilter.operator || '=';
-                                                                let value = layerFilter.value;
-                                                                
-                                                                // Build where clause
-                                                                let whereClause = '';
-                                                                if (operator === 'IN') {
-                                                                    const values = value.split(',').map(v => `'${v.trim()}'`).join(',');
-                                                                    whereClause = `${field} IN (${values})`;
-                                                                } else if (operator === 'LIKE') {
-                                                                    whereClause = `${field} LIKE '%${value}%'`;
-                                                                } else if (['<', '>', '<=', '>=', '=', '!='].includes(operator)) {
-                                                                    // Check if value is numeric
-                                                                    if (!isNaN(value) && value.trim() !== '') {
-                                                                        whereClause = `${field}${operator}${value}`;
-                                                                    } else {
-                                                                        whereClause = `${field}${operator}'${value}'`;
-                                                                    }
-                                                                }
-                                                                
-                                                                if (whereClause) {
-                                                                    console.log('[ArcgisUploadPanel] Applying filter:', whereClause);
-                                                                    // Apply filter to map layer
-                                                                    const map = mapInstance && mapInstance();
-                                                                    if (map && layerInfoOpen) {
-                                                                        applyArcgisVectorLayerFilter(
-                                                                            map,
-                                                                            layerInfoOpen.serviceUrl,
-                                                                            layerInfoOpen.layerId,
-                                                                            layerInfoOpen.serviceKey,
-                                                                            whereClause
-                                                                        );
-                                                                    }
-                                                                    showFinishedMessage(`Filter applied: ${whereClause}`);
-                                                                }
-                                                            }}
-                                                        >
-                                                            Apply Filter
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            style={{
-                                                                flex: 1,
-                                                                padding: '6px 10px',
-                                                                backgroundColor: '#6c757d',
-                                                                color: '#fff',
-                                                                border: 'none',
-                                                                borderRadius: '4px',
-                                                                cursor: 'pointer',
-                                                                fontSize: '13px',
-                                                                fontWeight: '500'
-                                                            }}
-                                                            onClick={() => {
-                                                                // Clear filter from map layer
-                                                                const map = mapInstance && mapInstance();
-                                                                if (map && layerInfoOpen) {
-                                                                    applyArcgisVectorLayerFilter(
-                                                                        map,
-                                                                        layerInfoOpen.serviceUrl,
-                                                                        layerInfoOpen.layerId,
-                                                                        layerInfoOpen.serviceKey,
-                                                                        '1=1'
-                                                                    );
-                                                                }
-                                                                setLayerFilter(null);
-                                                                showFinishedMessage('Filter cleared');
-                                                            }}
-                                                        >
-                                                            Clear
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-                                    
-                                    {/* Link to the actual layer page and Save button */}
-                                    <div data-onboarding-target="arcgis-layer-info-actions" style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px solid #ddd' }}>
-                                        <button
-                                            type="button"
-                                            className="arcgis-service-info-save-btn"
-                                            onClick={handleSaveLayerToCustomLayers}
-                                            title="Save to Custom Layers"
-                                            style={{
-                                                padding: '6px 10px',
-                                                backgroundColor: '#1976d2',
-                                                color: '#fff',
-                                                border: 'none',
-                                                borderRadius: '4px',
-                                                cursor: 'pointer',
-                                                fontSize: '13px',
-                                                fontWeight: '500',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '4px',
-                                                whiteSpace: 'nowrap',
-                                                marginBottom: '12px'
-                                            }}
-                                        >
-                                            <FontAwesomeIcon icon={faFloppyDisk} style={{ fontSize: '12px' }} />
-                                            Save
-                                        </button>
-                                        <a 
-                                            href={`${layerInfoOpen.serviceUrl}/${layerInfoOpen.layerId}`} 
-                                            target="_blank" 
-                                            rel="noopener noreferrer"
-                                            style={{ color: '#1976d2', textDecoration: 'none', fontSize: '13px' }}
-                                        >
-                                            View ArcGIS Layer Page →
-                                        </a>
-                                    </div>
-                                </div>
-                            );
-                        })()}
-                    </div>
-                </div>
-            )}
+            {/* Layer Info Modal — shared component */}
+            <LayerInfoModal
+                layerInfo={layerInfoOpen}
+                info={layerInfoOpen ? layerInfoCache[`${layerInfoOpen.serviceKey}-${layerInfoOpen.layerId}`] : null}
+                loading={layerInfoLoading}
+                getStyle={getLayerInfoModalStyle}
+                onboardingPrefix="arcgis"
+                onClose={closeLayerInfo}
+                mapInstance={mapInstance}
+                defaultOpacity={layerOpacity}
+                rawLayers={layerInfoOpen ? (serviceLayers[layerInfoOpen.serviceKey] || []) : []}
+                legend={layerInfoOpen ? serviceLegends[layerInfoOpen.serviceKey] : null}
+                onOpenLayerInfo={openLayerInfo}
+                onSave={handleSaveLayerToCustomLayers}
+                showMessage={showFinishedMessage}
+            />
 
             {/* State menu: outside the upload panel */}
             {/* renderStateMenu() - disabled, DB/Local toggle moved to toolbar */}

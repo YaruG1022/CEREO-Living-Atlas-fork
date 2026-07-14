@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { createPortal, unstable_batchedUpdates } from "react-dom";
-import { addArcgisVectorLayer, applyArcgisVectorLayerFilter } from './arcgisVectorUtils';
+import { addArcgisVectorLayer } from './arcgisVectorUtils';
 import { showArcgisPopup } from './arcgisPopupUtils';
 import {
     fetchArcgisLayers,
@@ -15,9 +15,10 @@ import { filterUploadPanelData } from './arcgisUploadSearchUtils';
 import { buildMatchList, useSearchNav } from './arcgisSearchNavUtils';
 import ArcgisRenameItem from './ArcgisRenameItem';
 import { useLayerContextMenu, LayerContextMenuPopup } from './LayerContextMenu';
+import { ServiceInfoModal, LayerInfoModal } from './ArcgisInfoModals';
 import './CustomLayersPanel.css';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faTimes, faSearch, faFolderPlus, faChevronUp, faChevronDown, faQuestion, faEllipsisV, faPlay, faFloppyDisk, faEye } from '@fortawesome/free-solid-svg-icons';
+import { faTimes, faSearch, faFolderPlus, faChevronUp, faChevronDown, faQuestion, faEllipsisV, faPlay, faEye } from '@fortawesome/free-solid-svg-icons';
 import { faFolder } from '@fortawesome/free-regular-svg-icons';
 import ClearAllLayersButton from './ClearAllLayersButton';
 import CustomLayersPanelOnboarding from './OnboardingCustomLayersPanel';
@@ -48,7 +49,6 @@ function CustomLayersPanel({
     const [expandedLayers, setExpandedLayers] = useState(new Set());
 
     const [layerOpacity, setLayerOpacity] = useState(0.7);
-    const [serviceInfoOpacityByKey, setServiceInfoOpacityByKey] = useState({});
     const [statusMsg, setStatusMsg] = useState(null);
     const panelRootRef = useRef(null);
 
@@ -112,7 +112,6 @@ function CustomLayersPanel({
     const [layerInfoOpen, setLayerInfoOpen] = useState(null);
     const [layerInfoCache, setLayerInfoCache] = useState({});
     const [layerInfoLoading, setLayerInfoLoading] = useState(false);
-    const [layerFilter, setLayerFilter] = useState(null); // { field, operator, value } for current layer filtering
 
     const showStatus = (msg) => {
         setStatusMsg(msg);
@@ -229,7 +228,6 @@ function CustomLayersPanel({
             setExpandedLayers(new Set());
             setServiceInfoOpenKey(null);
             setLayerInfoOpen(null);
-            setLayerFilter(null);
             return;
         }
 
@@ -611,27 +609,6 @@ function CustomLayersPanel({
             }
         });
     };
-
-    const applyServiceOpacity = useCallback((serviceKey, newOpacity) => {
-        const map = mapInstance && mapInstance();
-        if (!map || !map.getStyle || !serviceKey) return;
-        const style = map.getStyle();
-        if (!style || !Array.isArray(style.layers)) return;
-
-        style.layers.forEach(l => {
-            if (l.id.startsWith(`arcgis-raster-layer-custom-${serviceKey}-`)) {
-                map.setPaintProperty(l.id, 'raster-opacity', newOpacity);
-            } else if (l.id.startsWith(`arcgis-vector-layer-custom-${serviceKey}-`)) {
-                if (l.type === 'fill') {
-                    map.setPaintProperty(l.id, 'fill-opacity', newOpacity);
-                } else if (l.type === 'line') {
-                    map.setPaintProperty(l.id, 'line-opacity', newOpacity);
-                } else if (l.type === 'circle') {
-                    map.setPaintProperty(l.id, 'circle-opacity', newOpacity);
-                }
-            }
-        });
-    }, [mapInstance]);
 
     const INFO_MODAL_WIDTH = 380;
 
@@ -1209,7 +1186,6 @@ function CustomLayersPanel({
     };
     const closeLayerInfo = () => {
         setLayerInfoOpen(null);
-        setLayerFilter(null); // Reset filter when closing modal
     };
 
     useEffect(() => {
@@ -1236,7 +1212,6 @@ function CustomLayersPanel({
             }
         } else if (layerInfoOpen) {
             setLayerInfoOpen(null);
-            setLayerFilter(null);
         }
     }, [
         isOnboardingOpen,
@@ -1290,13 +1265,7 @@ function CustomLayersPanel({
     };
 
     // Helper: convert HTML to plain text
-    function toPlainText(html) {
-        if (!html) return '';
-        const tmp = document.createElement('div');
-        tmp.innerHTML = html;
-        const text = tmp.textContent || tmp.innerText || '';
-        return text.replace(/\u00A0/g, ' ').trim();
-    }
+    // (moved to shared ArcgisInfoModals)
 
     const renderServiceLayerLinks = (service) => {
         const rawLayers = serviceLayers[service.key] || [];
@@ -1765,533 +1734,39 @@ function CustomLayersPanel({
                 </div>
             )}
 
-            {/* Service Info Modal */}
-            {serviceInfoOpenKey && (
-                <div className="arcgis-service-info-modal" style={getInfoModalStyle()} data-onboarding-target="custom-layers-service-info-modal">
-                    <div className="arcgis-service-info-modal-header">
-                        <strong>Service info</strong>
-                        <button
-                            className="arcgis-service-info-modal-close"
-                            onClick={closeServiceInfo}
-                            aria-label="Close"
-                        >
-                            &times;
-                        </button>
-                    </div>
-                    <div className="arcgis-service-info-modal-content">
-                        {serviceInfoLoading && <div>Loading service info…</div>}
-                        {!serviceInfoLoading && (() => {
-                            const info = serviceInfoCache[serviceInfoOpenKey] || {};
-                            const currentService = customServices.find(s => s.key === serviceInfoOpenKey);
-                            if (!info || Object.keys(info).length === 0) {
-                                return (
-                                    <div>
-                                        <div className="arcgis-service-info-empty">No information available.</div>
-                                        {currentService && currentService.url && (
-                                            <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #ddd' }}>
-                                                <button
-                                                    type="button"
-                                                    className="arcgis-service-info-save-btn"
-                                                    onClick={handleSaveServiceToCustomLayers}
-                                                    title="Save to Custom Layers"
-                                                    style={{
-                                                        padding: '6px 10px',
-                                                        backgroundColor: '#1976d2',
-                                                        color: '#fff',
-                                                        border: 'none',
-                                                        borderRadius: '4px',
-                                                        cursor: 'pointer',
-                                                        fontSize: '13px',
-                                                        fontWeight: '500',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '4px',
-                                                        whiteSpace: 'nowrap',
-                                                        marginBottom: '12px'
-                                                    }}
-                                                >
-                                                    <FontAwesomeIcon icon={faFloppyDisk} style={{ fontSize: '12px' }} />
-                                                    Save
-                                                </button>
-                                                <a href={currentService.url} target="_blank" rel="noopener noreferrer"
-                                                    style={{ color: '#1976d2', textDecoration: 'none', fontSize: '13px' }}>
-                                                    View ArcGIS Service Page →
-                                                </a>
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            }
-                            const sr = info.spatialReference || {};
-                            const srText = sr.latestWkid
-                                ? `WKID ${sr.latestWkid}`
-                                : (sr.wkid ? `WKID ${sr.wkid}` : (sr.wkt ? 'WKT' : '—'));
-                            return (
-                                <div>
-                                    <div className="arcgis-service-info-row">
-                                        <strong>Service Name:</strong> {(currentService && currentService.label) || info.mapName || info.name || '—'}
-                                    </div>
-                                    {info.serviceDescription || info.description ? (
-                                        <div className="arcgis-service-info-row">
-                                            <strong>Service Description:</strong>
-                                            <div className="arcgis-service-info-description">
-                                                {toPlainText(info.serviceDescription || info.description)}
-                                            </div>
-                                        </div>
-                                    ) : null}
-                                    <div className="arcgis-service-info-row">
-                                        <strong>Service Item Id:</strong> {info.serviceItemId || info.itemId || '—'}
-                                    </div>
-                                    <div className="arcgis-service-info-row">
-                                        <strong>Copyright Text:</strong> {toPlainText(info.copyrightText) || '—'}
-                                    </div>
-                                    <div className="arcgis-service-info-row">
-                                        <strong>Spatial Reference:</strong> {srText}
-                                    </div>
+            {/* Service Info Modal — shared component */}
+            <ServiceInfoModal
+                serviceKey={serviceInfoOpenKey}
+                service={serviceInfoOpenKey ? (customServices.find(s => s.key === serviceInfoOpenKey) || null) : null}
+                info={serviceInfoOpenKey ? serviceInfoCache[serviceInfoOpenKey] : null}
+                loading={serviceInfoLoading}
+                getStyle={getInfoModalStyle}
+                onboardingPrefix="custom-layers"
+                onClose={closeServiceInfo}
+                mapInstance={mapInstance}
+                mapKeyPrefix="custom-"
+                defaultOpacity={layerOpacity}
+                renderLayerLinks={renderServiceLayerLinks}
+                onSave={handleSaveServiceToCustomLayers}
+            />
 
-                                    <div className="arcgis-service-info-row service-info-opacity-row" data-onboarding-target="custom-layers-service-info-opacity">
-                                        <strong>Service Opacity:</strong>
-                                        <div className="service-info-opacity-controls">
-                                            <input
-                                                type="range"
-                                                min="0"
-                                                max="1"
-                                                step="0.01"
-                                                value={serviceInfoOpacityByKey[serviceInfoOpenKey] ?? layerOpacity}
-                                                onChange={(e) => {
-                                                    const value = parseFloat(e.target.value);
-                                                    setServiceInfoOpacityByKey(prev => ({ ...prev, [serviceInfoOpenKey]: value }));
-                                                    applyServiceOpacity(serviceInfoOpenKey, value);
-                                                }}
-                                                className="service-info-opacity-slider"
-                                                style={{ background: `linear-gradient(to right, #27425d ${(serviceInfoOpacityByKey[serviceInfoOpenKey] ?? layerOpacity) * 100}%, #d8e1ea ${(serviceInfoOpacityByKey[serviceInfoOpenKey] ?? layerOpacity) * 100}%)` }}
-                                            />
-                                            <span className="service-info-opacity-value">{Math.round((serviceInfoOpacityByKey[serviceInfoOpenKey] ?? layerOpacity) * 100)}%</span>
-                                        </div>
-                                    </div>
-
-                                    {currentService && (
-                                        <div className="arcgis-service-info-row" data-onboarding-target="custom-layers-service-info-layer-links">
-                                            <strong>Layers / Sublayers:</strong>
-                                            {renderServiceLayerLinks(currentService)}
-                                        </div>
-                                    )}
-                                    {currentService && currentService.url && (
-                                        <div data-onboarding-target="custom-layers-service-info-actions" style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px solid #ddd' }}>
-                                            <button
-                                                type="button"
-                                                className="arcgis-service-info-save-btn"
-                                                onClick={handleSaveServiceToCustomLayers}
-                                                title="Save to Custom Layers"
-                                                style={{
-                                                    padding: '6px 10px',
-                                                    backgroundColor: '#1976d2',
-                                                    color: '#fff',
-                                                    border: 'none',
-                                                    borderRadius: '4px',
-                                                    cursor: 'pointer',
-                                                    fontSize: '13px',
-                                                    fontWeight: '500',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '4px',
-                                                    whiteSpace: 'nowrap',
-                                                    marginBottom: '12px'
-                                                }}
-                                            >
-                                                <FontAwesomeIcon icon={faFloppyDisk} style={{ fontSize: '12px' }} />
-                                                Save
-                                            </button>
-                                            <a href={currentService.url} target="_blank" rel="noopener noreferrer"
-                                                style={{ color: '#1976d2', textDecoration: 'none', fontSize: '13px' }}>
-                                                View ArcGIS Service Page →
-                                            </a>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })()}
-                    </div>
-                </div>
-            )}
-
-            {/* Layer Info Modal */}
-            {layerInfoOpen && (
-                <div className="arcgis-service-info-modal" style={getLayerInfoModalStyle()} data-onboarding-target="custom-layers-layer-info-modal">
-                    <div className="arcgis-service-info-modal-header">
-                        <strong>Layer Info: {layerInfoOpen.layerName}</strong>
-                        <button
-                            className="arcgis-service-info-modal-close"
-                            onClick={closeLayerInfo}
-                            aria-label="Close"
-                        >
-                            &times;
-                        </button>
-                    </div>
-                    <div className="arcgis-service-info-modal-content">
-                        {layerInfoLoading && <div>Loading layer info…</div>}
-                        {!layerInfoLoading && (() => {
-                            const cacheKey = `${layerInfoOpen.serviceKey}-${layerInfoOpen.layerId}`;
-                            const info = layerInfoCache[cacheKey];
-                            if (!info || Object.keys(info).length === 0) {
-                                return (
-                                    <div>
-                                        <div className="arcgis-service-info-empty">No layer information available.</div>
-                                        <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #ddd' }}>
-                                            <a href={`${layerInfoOpen.serviceUrl}/${layerInfoOpen.layerId}`}
-                                                target="_blank" rel="noopener noreferrer"
-                                                style={{ color: '#1976d2', textDecoration: 'none' }}>
-                                                View ArcGIS Layer Page →
-                                            </a>
-                                        </div>
-                                    </div>
-                                );
-                            }
-                            return (
-                                <div>
-                                    {info.description && (
-                                        <div className="arcgis-service-info-row">
-                                            <strong>Description:</strong>
-                                            <div className="arcgis-service-info-description">
-                                                {toPlainText(info.description)}
-                                            </div>
-                                        </div>
-                                    )}
-                                    {info.name && (
-                                        <div className="arcgis-service-info-row">
-                                            <strong>Layer Name:</strong> {info.name}
-                                        </div>
-                                    )}
-                                    {info.type && (
-                                        <div className="arcgis-service-info-row">
-                                            <strong>Geometry Type:</strong> {info.type}
-                                        </div>
-                                    )}
-                                    {info.copyrightText && (
-                                        <div className="arcgis-service-info-row">
-                                            <strong>Copyright Text:</strong> {toPlainText(info.copyrightText)}
-                                        </div>
-                                    )}
-                                    {info.minScale && (
-                                        <div className="arcgis-service-info-row">
-                                            <strong>Min Scale:</strong> {info.minScale.toLocaleString()}
-                                        </div>
-                                    )}
-                                    {info.maxScale && (
-                                        <div className="arcgis-service-info-row">
-                                            <strong>Max Scale:</strong> {info.maxScale.toLocaleString()}
-                                        </div>
-                                    )}
-                                    {info.defaultVisibility !== undefined && (
-                                        <div className="arcgis-service-info-row">
-                                            <strong>Default Visibility:</strong> {info.defaultVisibility ? 'Visible' : 'Hidden'}
-                                        </div>
-                                    )}
-                                    {info.hasAttachments !== undefined && (
-                                        <div className="arcgis-service-info-row">
-                                            <strong>Has Attachments:</strong> {info.hasAttachments ? 'Yes' : 'No'}
-                                        </div>
-                                    )}
-                                    {info.fields && info.fields.length > 0 && (
-                                        <div className="arcgis-service-info-row">
-                                            <strong>Fields:</strong> {info.fields.length} field(s)
-                                            <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
-                                                {info.fields.slice(0, 5).map(field => field.name).join(', ')}
-                                                {info.fields.length > 5 && '...'}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Legend display */}
-                                    {(() => {
-                                        const legend = serviceLegends[layerInfoOpen.serviceKey];
-                                        if (legend && legend.layers) {
-                                            const legendLayer = legend.layers.find(l => l.layerId === layerInfoOpen.layerId);
-                                            if (legendLayer && legendLayer.legend && legendLayer.legend.length > 0) {
-                                                return (
-                                                    <div className="arcgis-service-info-row">
-                                                        <strong>Legend:</strong>
-                                                        <div style={{ marginTop: '8px', paddingLeft: '12px' }}>
-                                                            {legendLayer.legend.map((item, idx) => (
-                                                                <div key={idx} style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                                    {item.imageData && (
-                                                                        <img src={`data:image/png;base64,${item.imageData}`} alt={item.label} style={{ width: '20px', height: '20px' }} />
-                                                                    )}
-                                                                    <span style={{ fontSize: '13px' }}>{item.label || item.value || 'N/A'}</span>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                );
-                                            }
-                                        }
-                                        return null;
-                                    })()}
-
-                                    {/* Parent layer link */}
-                                    {info.parentLayerId !== undefined && info.parentLayerId !== -1 && (() => {
-                                        const rawLayers = serviceLayers[layerInfoOpen.serviceKey] || [];
-                                        const parentLayer = rawLayers.find(l => l.id === info.parentLayerId);
-                                        if (parentLayer) {
-                                            return (
-                                                <div className="arcgis-service-info-row">
-                                                    <strong>Parent Layer:</strong>
-                                                    <button
-                                                        type="button"
-                                                        className="arcgis-service-info-layer-link"
-                                                        onClick={() => openLayerInfo(layerInfoOpen.service, { id: parentLayer.id, name: parentLayer.name })}
-                                                        style={{ marginLeft: '8px' }}
-                                                    >
-                                                        {parentLayer.name}
-                                                    </button>
-                                                </div>
-                                            );
-                                        }
-                                        return null;
-                                    })()}
-
-                                    {/* Child layers links */}
-                                    {(() => {
-                                        const rawLayers = serviceLayers[layerInfoOpen.serviceKey] || [];
-                                        const childFromIds = Array.isArray(info.subLayerIds)
-                                            ? info.subLayerIds
-                                                .map(id => rawLayers.find(l => l.id === id) || { id, name: `Layer ${id}` })
-                                            : [];
-                                        const childFromSubLayers = Array.isArray(info.subLayers)
-                                            ? info.subLayers
-                                                .map(sl => {
-                                                    const subId = sl?.id;
-                                                    if (subId === undefined || subId === null) return null;
-                                                    return rawLayers.find(l => l.id === subId) || { id: subId, name: sl?.name || `Layer ${subId}` };
-                                                })
-                                                .filter(Boolean)
-                                            : [];
-                                        const dedupMap = new Map();
-                                        [...childFromIds, ...childFromSubLayers].forEach((layer) => {
-                                            dedupMap.set(layer.id, layer);
-                                        });
-                                        const childLayers = Array.from(dedupMap.values());
-
-                                        if (childLayers.length > 0) {
-                                            return (
-                                                <div className="arcgis-service-info-row">
-                                                    <strong>Child Layers:</strong>
-                                                    <div style={{ marginTop: '8px', paddingLeft: '12px', maxHeight: '180px', overflowY: 'auto', border: '1px solid #eee', borderRadius: '4px', padding: '8px 8px 2px 12px' }}>
-                                                        {childLayers.map(child => (
-                                                            <div key={child.id} style={{ marginBottom: '6px' }}>
-                                                                <button
-                                                                    type="button"
-                                                                    className="arcgis-service-info-layer-link"
-                                                                    onClick={() => openLayerInfo(layerInfoOpen.service, { id: child.id, name: child.name })}
-                                                                >
-                                                                    {child.name}
-                                                                </button>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            );
-                                        }
-                                        return null;
-                                    })()}
-
-                                    {/* Filter UI */}
-                                    {info.fields && info.fields.length > 0 && (
-                                        <div className="arcgis-service-info-row" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #ddd' }} data-onboarding-target="custom-layers-layer-info-filter">
-                                            <strong>Filter by Field:</strong>
-                                            <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                {/* Field selector */}
-                                                <select
-                                                    value={layerFilter?.field || ''}
-                                                    onChange={(e) => setLayerFilter({ ...layerFilter, field: e.target.value })}
-                                                    style={{
-                                                        padding: '6px 8px',
-                                                        borderRadius: '4px',
-                                                        border: '1px solid #ddd',
-                                                        fontSize: '13px',
-                                                        fontFamily: 'inherit'
-                                                    }}
-                                                >
-                                                    <option value="">Select a field...</option>
-                                                    {info.fields.map((field) => (
-                                                        <option key={field.name} value={field.name}>
-                                                            {field.alias || field.name} ({field.type})
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                                
-                                                {/* Operator selector */}
-                                                {layerFilter?.field && (
-                                                    <select
-                                                        value={layerFilter?.operator || '='}
-                                                        onChange={(e) => setLayerFilter({ ...layerFilter, operator: e.target.value })}
-                                                        style={{
-                                                            padding: '6px 8px',
-                                                            borderRadius: '4px',
-                                                            border: '1px solid #ddd',
-                                                            fontSize: '13px',
-                                                            fontFamily: 'inherit'
-                                                        }}
-                                                    >
-                                                        <option value="=">=</option>
-                                                        <option value="!=">!=</option>
-                                                        <option value=">">&gt;</option>
-                                                        <option value=">=">&gt;=</option>
-                                                        <option value="<">&lt;</option>
-                                                        <option value="<=">&lt;=</option>
-                                                        <option value="LIKE">LIKE</option>
-                                                        <option value="IN">IN</option>
-                                                    </select>
-                                                )}
-                                                
-                                                {/* Value input */}
-                                                {layerFilter?.field && (
-                                                    <input
-                                                        type="text"
-                                                        placeholder={layerFilter?.operator === 'IN' ? 'Comma-separated values' : 'Enter value...'}
-                                                        value={layerFilter?.value || ''}
-                                                        onChange={(e) => setLayerFilter({ ...layerFilter, value: e.target.value })}
-                                                        style={{
-                                                            padding: '6px 8px',
-                                                            borderRadius: '4px',
-                                                            border: '1px solid #ddd',
-                                                            fontSize: '13px',
-                                                            fontFamily: 'inherit'
-                                                        }}
-                                                    />
-                                                )}
-                                                
-                                                {/* Apply/Clear buttons */}
-                                                {layerFilter?.field && layerFilter?.value && (
-                                                    <div style={{ display: 'flex', gap: '6px' }}>
-                                                        <button
-                                                            type="button"
-                                                            style={{
-                                                                flex: 1,
-                                                                padding: '6px 10px',
-                                                                backgroundColor: '#28a745',
-                                                                color: '#fff',
-                                                                border: 'none',
-                                                                borderRadius: '4px',
-                                                                cursor: 'pointer',
-                                                                fontSize: '13px',
-                                                                fontWeight: '500'
-                                                            }}
-                                                            onClick={() => {
-                                                                const field = layerFilter.field;
-                                                                const operator = layerFilter.operator || '=';
-                                                                let value = layerFilter.value;
-                                                                
-                                                                // Build where clause
-                                                                let whereClause = '';
-                                                                if (operator === 'IN') {
-                                                                    const values = value.split(',').map(v => `'${v.trim()}'`).join(',');
-                                                                    whereClause = `${field} IN (${values})`;
-                                                                } else if (operator === 'LIKE') {
-                                                                    whereClause = `${field} LIKE '%${value}%'`;
-                                                                } else if (['<', '>', '<=', '>=', '=', '!='].includes(operator)) {
-                                                                    // Check if value is numeric
-                                                                    if (!isNaN(value) && value.trim() !== '') {
-                                                                        whereClause = `${field}${operator}${value}`;
-                                                                    } else {
-                                                                        whereClause = `${field}${operator}'${value}'`;
-                                                                    }
-                                                                }
-                                                                
-                                                                if (whereClause) {
-                                                                    console.log('[CustomLayersPanel] Applying filter:', whereClause);
-                                                                    // Apply filter to map layer
-                                                                    const map = mapInstance && mapInstance();
-                                                                    if (map && layerInfoOpen) {
-                                                                        applyArcgisVectorLayerFilter(
-                                                                            map,
-                                                                            layerInfoOpen.serviceUrl,
-                                                                            layerInfoOpen.layerId,
-                                                                            layerInfoOpen.serviceKey,
-                                                                            whereClause
-                                                                        );
-                                                                    }
-                                                                    showStatus(`Filter applied: ${whereClause}`);
-                                                                }
-                                                            }}
-                                                        >
-                                                            Apply Filter
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            style={{
-                                                                flex: 1,
-                                                                padding: '6px 10px',
-                                                                backgroundColor: '#6c757d',
-                                                                color: '#fff',
-                                                                border: 'none',
-                                                                borderRadius: '4px',
-                                                                cursor: 'pointer',
-                                                                fontSize: '13px',
-                                                                fontWeight: '500'
-                                                            }}
-                                                            onClick={() => {
-                                                                // Clear filter from map layer
-                                                                const map = mapInstance && mapInstance();
-                                                                if (map && layerInfoOpen) {
-                                                                    applyArcgisVectorLayerFilter(
-                                                                        map,
-                                                                        layerInfoOpen.serviceUrl,
-                                                                        layerInfoOpen.layerId,
-                                                                        layerInfoOpen.serviceKey,
-                                                                        '1=1'
-                                                                    );
-                                                                }
-                                                                setLayerFilter(null);
-                                                                showStatus('Filter cleared');
-                                                            }}
-                                                        >
-                                                            Clear
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Link to the actual layer page and Save button */}
-                                    <div data-onboarding-target="custom-layers-layer-info-actions" style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px solid #ddd' }}>
-                                        <button
-                                            type="button"
-                                            className="arcgis-service-info-save-btn"
-                                            onClick={handleSaveLayerToCustomLayers}
-                                            title="Save to Custom Layers"
-                                            style={{
-                                                padding: '6px 10px',
-                                                backgroundColor: '#1976d2',
-                                                color: '#fff',
-                                                border: 'none',
-                                                borderRadius: '4px',
-                                                cursor: 'pointer',
-                                                fontSize: '13px',
-                                                fontWeight: '500',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '4px',
-                                                whiteSpace: 'nowrap',
-                                                marginBottom: '12px'
-                                            }}
-                                        >
-                                            <FontAwesomeIcon icon={faFloppyDisk} style={{ fontSize: '12px' }} />
-                                            Save
-                                        </button>
-                                        <a href={`${layerInfoOpen.serviceUrl}/${layerInfoOpen.layerId}`}
-                                            target="_blank" rel="noopener noreferrer"
-                                            style={{ color: '#1976d2', textDecoration: 'none', fontSize: '13px' }}>
-                                            View ArcGIS Layer Page →
-                                        </a>
-                                    </div>
-                                </div>
-                            );
-                        })()}
-                    </div>
-                </div>
-            )}
+            {/* Layer Info Modal — shared component */}
+            <LayerInfoModal
+                layerInfo={layerInfoOpen}
+                info={layerInfoOpen ? layerInfoCache[`${layerInfoOpen.serviceKey}-${layerInfoOpen.layerId}`] : null}
+                loading={layerInfoLoading}
+                getStyle={getLayerInfoModalStyle}
+                onboardingPrefix="custom-layers"
+                onClose={closeLayerInfo}
+                mapInstance={mapInstance}
+                mapKeyPrefix="custom-"
+                defaultOpacity={layerOpacity}
+                rawLayers={layerInfoOpen ? (serviceLayers[layerInfoOpen.serviceKey] || []) : []}
+                legend={layerInfoOpen ? serviceLegends[layerInfoOpen.serviceKey] : null}
+                onOpenLayerInfo={openLayerInfo}
+                onSave={handleSaveLayerToCustomLayers}
+                showMessage={showStatus}
+            />
 
             <CustomLayersPanelOnboarding
                 isOpen={isOnboardingOpen}

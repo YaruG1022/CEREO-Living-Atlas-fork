@@ -920,6 +920,94 @@
     font-size: 12px;
 }
 
+/* Layer info modal: dual-handle zoom range slider */
+.layer-info-zoom-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.layer-info-zoom-track-wrap {
+    position: relative;
+    flex: 1;
+    height: 14px;
+    display: flex;
+    align-items: center;
+}
+
+.layer-info-zoom-track {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 6px;
+    border-radius: 3px;
+    background: #d8e1ea;
+}
+
+.layer-info-zoom-track-fill {
+    position: absolute;
+    height: 6px;
+    border-radius: 3px;
+    background: #27425d;
+}
+
+/* Two overlaid range inputs; only the thumbs receive pointer events. */
+.layer-info-zoom-input {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 14px;
+    margin: 0;
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    pointer-events: none;
+    outline: none;
+}
+
+.layer-info-zoom-input::-webkit-slider-thumb {
+    pointer-events: auto;
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid #27425d;
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+}
+
+.layer-info-zoom-input::-moz-range-thumb {
+    pointer-events: auto;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid #27425d;
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+}
+
+.layer-info-zoom-input::-moz-range-track {
+    background: transparent;
+}
+
+.layer-info-zoom-value {
+    min-width: 64px;
+    text-align: right;
+    font-weight: 600;
+    color: #27425d !important;
+    font-size: 12px;
+}
+
+.layer-info-zoom-hint {
+    font-size: 11px;
+    color: #888;
+    margin-top: 4px;
+}
+
 /* Historical view time filter */
 .service-info-time-filter {
     margin-top: 6px;
