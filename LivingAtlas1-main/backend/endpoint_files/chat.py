@@ -321,7 +321,9 @@ def ask(payload: ChatRequest):
 
     doc_context = get_relevant_docs(question)
     card_context = get_card_context(question)
-    skill_context = _CHAT_AGENT.build_skill_context(question)
+    agent_result = _CHAT_AGENT.build_skill_context(question)
+    skill_context = agent_result.context
+    navigation_links = agent_result.navigation_links
 
     context_sections = []
     if doc_context:
@@ -359,6 +361,17 @@ def ask(payload: ChatRequest):
             temperature=0.4,
         )
         answer = response.choices[0].message.content.strip()
+        if navigation_links:
+            link_lines = [
+                "",
+                "Quick actions in Upload Panel:",
+            ]
+            for link in navigation_links[:5]:
+                title = link.get("title", "Open in Upload Panel")
+                url = link.get("url", "")
+                if title and url:
+                    link_lines.append(f"- [{title}]({url})")
+            answer = answer + "\n" + "\n".join(link_lines)
         return ChatResponse(answer=answer)
     except Exception as e:
         # Print safe diagnostics for Render logs (no API key content).

@@ -55,6 +55,8 @@ const STATE_LABELS = { WA: 'WA', ID: 'ID', OR: 'OR' };
 const STATE_FULL_NAMES = { WA: 'Washington State ArcGIS Services', ID: 'Idaho ArcGIS Services', OR: 'Oregon ArcGIS Services' };
 const STATE_CODE_TO_NAME = { WA: 'washington', ID: 'idaho', OR: 'oregon' };
 
+const normalizeLookupText = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
 // Local JSON fallback data
 const ARCGIS_SERVICES_BY_STATE = {
     WA: WA_ARCGIS_SERVICES || [],
@@ -227,6 +229,7 @@ function ArcgisUploadPanel({
     const [currentPath, setCurrentPath] = useState({ stateCode: null, folder: null });
     const [expandedServices, setExpandedServices] = useState(new Set());
     const [expandedLayers, setExpandedLayers] = useState(new Set()); // Track which layers are expanded
+    const [chatbotHighlightTarget, setChatbotHighlightTarget] = useState(null);
     // State for added-only checkbox
     const [showAddedOnly, setShowAddedOnly] = useState(false);
 
@@ -993,12 +996,78 @@ function ArcgisUploadPanel({
     useEffect(() => {
         if (!navigateToItem || !isOpen) return;
         if (ARCGIS_SERVICES.length === 0) return; // wait for services to load
-        const { serviceKey, stateCode, folderName } = navigateToItem;
-        pendingNavigateRef.current = navigateToItem;
-        setCurrentPath({ stateCode, folder: folderName });
-        setExpandedStates(prev => new Set([...prev, stateCode]));
-        setExpandedFolders(prev => new Set([...prev, folderName]));
-        setExpandedServices(prev => new Set([...prev, serviceKey]));
+        const desiredStateCode = (navigateToItem.stateCode || '').toUpperCase();
+        const desiredFolderName = navigateToItem.folderName || null;
+        const desiredServiceKey = navigateToItem.serviceKey || null;
+        const desiredServiceName = navigateToItem.serviceName || null;
+
+        const scopedCandidates = ARCGIS_SERVICES.filter((service) => {
+            const stateMatches = !desiredStateCode
+                || (service.state || '').toLowerCase() === (STATE_CODE_TO_NAME[desiredStateCode] || '').toLowerCase();
+            const folderMatches = !desiredFolderName
+                || String(service.folder || '').toLowerCase() === String(desiredFolderName).toLowerCase();
+            return stateMatches && folderMatches;
+        });
+
+        let resolvedService = null;
+        if (desiredServiceKey) {
+            resolvedService = ARCGIS_SERVICES.find(s => s.key === desiredServiceKey) || null;
+        }
+        if (!resolvedService && desiredServiceName) {
+            const targetName = normalizeLookupText(desiredServiceName);
+            resolvedService = scopedCandidates.find((service) => {
+                const label = normalizeLookupText(service.label);
+                const key = normalizeLookupText(service.key);
+                return label === targetName || label.includes(targetName) || key === targetName;
+            }) || null;
+        }
+        if (!resolvedService && scopedCandidates.length > 0) {
+            resolvedService = scopedCandidates[0];
+        }
+
+        const resolvedStateCode = desiredStateCode || (resolvedService
+            ? (Object.entries(STATE_CODE_TO_NAME).find(([, name]) => name === (resolvedService.state || '').toLowerCase())?.[0] || 'WA')
+            : 'WA');
+        const resolvedFolderName = desiredFolderName || resolvedService?.folder || null;
+        const resolvedServiceKey = resolvedService?.key || desiredServiceKey || null;
+
+        pendingNavigateRef.current = {
+            ...navigateToItem,
+            stateCode: resolvedStateCode,
+            folderName: resolvedFolderName,
+            serviceKey: resolvedServiceKey,
+        };
+
+        setCurrentPath({ stateCode: resolvedStateCode, folder: resolvedFolderName });
+        setExpandedStates(prev => new Set([...prev, resolvedStateCode]));
+        if (resolvedFolderName) {
+            setExpandedFolders(prev => new Set([...prev, resolvedFolderName]));
+        }
+        if (resolvedServiceKey) {
+            setExpandedServices(prev => new Set([...prev, resolvedServiceKey]));
+            setChatbotHighlightTarget(`service-${resolvedServiceKey}`);
+
+            if (resolvedService && serviceLayers[resolvedServiceKey] === undefined) {
+                setServiceLayersLoading(prev => ({ ...prev, [resolvedServiceKey]: true }));
+                fetchArcgisLayers(resolvedService.url)
+                    .then(layers => {
+                        setServiceLayers(prev => ({ ...prev, [resolvedServiceKey]: layers || [] }));
+                        setCheckedLayerIds(prev => prev[resolvedServiceKey] !== undefined ? prev : { ...prev, [resolvedServiceKey]: [] });
+                        setServiceLayerAdded(prev => prev[resolvedServiceKey] !== undefined ? prev : { ...prev, [resolvedServiceKey]: false });
+                        setCheckedSublayerIds(prev => prev[resolvedServiceKey] !== undefined ? prev : { ...prev, [resolvedServiceKey]: {} });
+                    })
+                    .catch(() => {
+                        setServiceLayers(prev => ({ ...prev, [resolvedServiceKey]: [] }));
+                    })
+                    .finally(() => {
+                        setServiceLayersLoading(prev => {
+                            const next = { ...prev };
+                            delete next[resolvedServiceKey];
+                            return next;
+                        });
+                    });
+            }
+        }
     }, [navigateToItem, isOpen, ARCGIS_SERVICES.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Once layers for the target service are loaded, apply checkbox, show loading animation and scroll
@@ -1006,8 +1075,12 @@ function ArcgisUploadPanel({
         const target = pendingNavigateRef.current;
         if (!target) return;
         const { serviceKey, layerId } = target;
+        if (!serviceKey) return;
         const layers = serviceLayers[serviceKey];
-        if (!layers) return; // not yet loaded
+        const needsLayerData = layerId != null || !!target.toggleLayer;
+        if (needsLayerData && !layers) return; // not yet loaded
+
+        const safeLayers = Array.isArray(layers) ? layers : [];
 
         pendingNavigateRef.current = null;
 
@@ -1018,7 +1091,7 @@ function ArcgisUploadPanel({
             if (target.toggleChecked) {
                 // Add: same logic as checking the layer in the panel
                 if (layerId != null) {
-                    const layer = layers.find(l => l.id === layerId);
+                    const layer = safeLayers.find(l => l.id === layerId);
                     if (layer) {
                         setCheckedLayerIds(prev => ({
                             ...prev,
@@ -1027,14 +1100,14 @@ function ArcgisUploadPanel({
                         addLoadingMessage(getLoadingMsgId(service, layer), getLoadingMsgText(service, layer));
                     }
                 } else {
-                    const allIds = layers.map(l => l.id);
+                    const allIds = safeLayers.map(l => l.id);
                     setCheckedLayerIds(prev => ({ ...prev, [serviceKey]: allIds }));
                     addLoadingMessage(getLoadingMsgId(service, null), getLoadingMsgText(service, null));
                 }
             } else {
                 // Remove: same logic as unchecking the layer in the panel
                 if (layerId != null) {
-                    const layer = layers.find(l => l.id === layerId);
+                    const layer = safeLayers.find(l => l.id === layerId);
                     setCheckedLayerIds(prev => ({
                         ...prev,
                         [serviceKey]: (prev[serviceKey] || []).filter(id => id !== layerId),
@@ -1050,7 +1123,7 @@ function ArcgisUploadPanel({
         // Expand all ancestor group layers of the target layer so it's visible
         if (layerId != null) {
             const layerMap = {};
-            layers.forEach(l => { layerMap[l.id] = l; });
+            safeLayers.forEach(l => { layerMap[l.id] = l; });
             const ancestorKeys = [];
             let cur = layerMap[layerId];
             while (cur) {
@@ -1072,6 +1145,13 @@ function ArcgisUploadPanel({
                 : null;
             const el = layerEl ?? folderAreaRef.current?.querySelector(`[data-service-key="${serviceKey}"]`);
             el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            if (el) {
+                el.classList.add('search-nav-current');
+                window.setTimeout(() => {
+                    el.classList.remove('search-nav-current');
+                }, 2400);
+            }
+            window.setTimeout(() => setChatbotHighlightTarget(null), 2600);
             onNavigateToItemDone?.();
         }, 180);
     }, [serviceLayers]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -2699,7 +2779,7 @@ function ArcgisUploadPanel({
                                                                     return (
                                                                         <div key={service.key} className="tree-node" data-service-key={service.key}>
                                                                             <div
-                                                                                className={`upload-item${currentMatchId === `service-${service.key}` ? ' search-nav-current' : ''}${serviceInfoOpenKey === service.key ? ' service-info-active' : ''}`}
+                                                                                className={`upload-item${currentMatchId === `service-${service.key}` || chatbotHighlightTarget === `service-${service.key}` ? ' search-nav-current' : ''}${serviceInfoOpenKey === service.key ? ' service-info-active' : ''}`}
                                                                                 style={searchResult?.matchedServiceKeys?.has(service.key) ? { fontWeight: 'bold' } : undefined}
                                                                                 data-search-match-id={searchResult?.matchedServiceKeys?.has(service.key) ? `service-${service.key}` : undefined}
                                                                                 onClick={() => handleServiceClick(service.key)}
@@ -2888,7 +2968,7 @@ function ArcgisUploadPanel({
                                         return (
                                             <div key={service.key} className="tree-node" data-service-key={service.key}>
                                                 <div
-                                                    className={`upload-item${serviceInfoOpenKey === service.key ? ' service-info-active' : ''}`}
+                                                    className={`upload-item${chatbotHighlightTarget === `service-${service.key}` ? ' search-nav-current' : ''}${serviceInfoOpenKey === service.key ? ' service-info-active' : ''}`}
                                                     onClick={() => handleServiceClick(service.key)}
                                                     onContextMenu={(e) => handleContextMenu(e, 'service', { service, layersToShow: allFeatureLayers })}
                                                 >

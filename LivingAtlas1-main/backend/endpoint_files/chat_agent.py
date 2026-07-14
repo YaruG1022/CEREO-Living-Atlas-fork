@@ -9,8 +9,8 @@ import os
 import re
 import time
 from dataclasses import dataclass
-from typing import List, Tuple
-from urllib.parse import quote
+from typing import List
+from urllib.parse import quote, urlencode
 
 import requests
 
@@ -21,6 +21,13 @@ class SkillResult:
     used: bool
     context_block: str
     warning: str = ""
+    navigation_links: List[dict] = None
+
+
+@dataclass
+class AgentExecutionResult:
+    context: str
+    navigation_links: List[dict]
 
 
 class BaseSkill:
@@ -173,6 +180,30 @@ class ArcGISServiceCatalogSkill(BaseSkill):
 
         return folder_targets[:3]
 
+    def _guess_state_code(self, folder: str, service_name: str) -> str:
+        candidate = f"{folder} {service_name}".lower()
+        if any(token in candidate for token in ("idaho", "id_", "_id", " id ")):
+            return "ID"
+        if any(token in candidate for token in ("oregon", "or_", "_or", " or ")):
+            return "OR"
+        return "WA"
+
+    def _build_upload_link(self, *, state_code: str, folder_name: str = "", service_name: str = "", title: str = "") -> dict:
+        params = {
+            "state": state_code,
+            "folder": folder_name,
+            "service": service_name,
+        }
+        clean_params = {k: v for k, v in params.items() if v}
+        url = f"atlas-upload://open?{urlencode(clean_params)}"
+        return {
+            "title": title or "Open in Upload Panel",
+            "url": url,
+            "stateCode": state_code,
+            "folderName": folder_name,
+            "serviceName": service_name,
+        }
+
     def run(self, question: str) -> SkillResult:
         try:
             payload = self._fetch_root_catalog()
@@ -188,6 +219,7 @@ class ArcGISServiceCatalogSkill(BaseSkill):
             matched_folders = []
             matched_services = []
             source_snippets = []
+            navigation_links = []
 
             if terms:
                 for folder in folders:
@@ -241,6 +273,17 @@ class ArcGISServiceCatalogSkill(BaseSkill):
                             f"- Folder '{folder}' matching services ({len(matched_folder_services)}): {rendered}"
                         )
 
+                        for svc_name, _svc_type in preview[:5]:
+                            guessed_state = self._guess_state_code(folder, svc_name)
+                            navigation_links.append(
+                                self._build_upload_link(
+                                    state_code=guessed_state,
+                                    folder_name=folder,
+                                    service_name=svc_name,
+                                    title=f"Open {svc_name} in Upload Panel",
+                                )
+                            )
+
                         source_snippets.append(
                             f"[ArcGIS live catalog] folder endpoint: {effective_base}/{folder}"
                         )
@@ -273,6 +316,14 @@ class ArcGISServiceCatalogSkill(BaseSkill):
                 source_snippets.append(
                     "[ArcGIS live catalog] matched folders: " + ", ".join(matched_folders[:8])
                 )
+                for folder in matched_folders[:4]:
+                    navigation_links.append(
+                        self._build_upload_link(
+                            state_code=self._guess_state_code(folder, ""),
+                            folder_name=folder,
+                            title=f"Open folder {folder} in Upload Panel",
+                        )
+                    )
 
             if matched_services:
                 svc_text = ", ".join(
@@ -283,6 +334,14 @@ class ArcGISServiceCatalogSkill(BaseSkill):
                 source_snippets.append(
                     f"[ArcGIS live catalog] matched root service: {first_root_name} ({first_root_type})"
                 )
+                for svc_name, _svc_type in matched_services[:5]:
+                    navigation_links.append(
+                        self._build_upload_link(
+                            state_code=self._guess_state_code("", svc_name),
+                            service_name=svc_name,
+                            title=f"Open {svc_name} in Upload Panel",
+                        )
+                    )
 
             if folder_targets:
                 lines.append("- Drill-down folders queried: " + ", ".join(folder_targets))
@@ -300,6 +359,7 @@ class ArcGISServiceCatalogSkill(BaseSkill):
                 skill_name=self.name,
                 used=True,
                 context_block="\n".join(lines),
+                navigation_links=navigation_links,
             )
         except Exception as exc:
             return SkillResult(
@@ -307,6 +367,7 @@ class ArcGISServiceCatalogSkill(BaseSkill):
                 used=True,
                 context_block="",
                 warning=f"ArcGIS live catalog fetch failed: {exc}",
+                navigation_links=[],
             )
 
 
@@ -316,9 +377,10 @@ class ChatAgent:
     def __init__(self, skills: List[BaseSkill]) -> None:
         self.skills = skills
 
-    def build_skill_context(self, question: str) -> str:
+    def build_skill_context(self, question: str) -> AgentExecutionResult:
         blocks = []
         warnings = []
+        navigation_links = []
 
         for skill in self.skills:
             if not skill.can_handle(question):
@@ -328,6 +390,8 @@ class ChatAgent:
                 blocks.append(f"=== SKILL: {result.skill_name} ===\n{result.context_block}")
             if result.warning:
                 warnings.append(f"[{result.skill_name}] {result.warning}")
+            if result.navigation_links:
+                navigation_links.extend(result.navigation_links)
 
         if warnings:
             print("[chat-agent] warnings:", " | ".join(warnings))
@@ -337,7 +401,15 @@ class ChatAgent:
                 + "\n- If a live skill warning exists, do NOT claim live catalog data was retrieved."
             )
 
-        return "\n\n".join(blocks)
+        deduped = []
+        seen = set()
+        for link in navigation_links:
+            key = link.get("url")
+            if key and key not in seen:
+                deduped.append(link)
+                seen.add(key)
+
+        return AgentExecutionResult(context="\n\n".join(blocks), navigation_links=deduped[:8])
 
 
 def build_default_chat_agent() -> ChatAgent:

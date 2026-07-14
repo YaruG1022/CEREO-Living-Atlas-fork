@@ -618,6 +618,14 @@
     cursor: not-allowed;
 }
 
+/* Reuse the existing search navigation highlight style (yellow) for chatbot deep-link navigation */
+.upload-panel .search-nav-current {
+    background: #fff3cd !important;
+    outline: 2px solid #f0c040;
+    outline-offset: -1px;
+    border-radius: 3px;
+}
+
 .arcgis-loading-messages {
     position: fixed;
     left: 50%;

@@ -41,33 +41,94 @@ export default function ChatbotWidget({
       .trim();
   };
 
-  const renderInlineFormattedText = (text, keyPrefix) => {
-    const boldParts = String(text).split(/(\*\*[^*]+\*\*)/g);
-    const nodes = [];
+  const handleAssistantLinkClick = (url, event) => {
+    if (!url || typeof url !== 'string') return;
 
-    boldParts.forEach((boldPart, boldIndex) => {
-      const boldMatch = boldPart.match(/^\*\*([^*]+)\*\*$/);
-      if (boldMatch) {
+    if (url.startsWith('atlas-upload://')) {
+      event?.preventDefault();
+      try {
+        const parsed = new URL(url);
+        const params = parsed.searchParams;
+        const stateCode = (params.get('state') || 'WA').toUpperCase();
+        const folderName = params.get('folder') || null;
+        const serviceName = params.get('service') || null;
+
+        window.dispatchEvent(new CustomEvent('open-arcgis-panel', {
+          detail: {
+            stateCode,
+            folderName,
+            serviceName,
+            fromChatbot: true,
+          },
+        }));
+      } catch (err) {
+        console.warn('[chatbot] Failed to parse atlas-upload link', url, err);
+      }
+    }
+  };
+
+  const renderInlineFormattedText = (text, keyPrefix) => {
+    const source = String(text);
+    const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+    const segments = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = linkRegex.exec(source)) !== null) {
+      if (match.index > lastIndex) {
+        segments.push({ type: 'text', value: source.slice(lastIndex, match.index) });
+      }
+      segments.push({ type: 'link', label: match[1], url: match[2] });
+      lastIndex = linkRegex.lastIndex;
+    }
+    if (lastIndex < source.length) {
+      segments.push({ type: 'text', value: source.slice(lastIndex) });
+    }
+    if (segments.length === 0) {
+      segments.push({ type: 'text', value: source });
+    }
+
+    const nodes = [];
+    segments.forEach((segment, segmentIndex) => {
+      if (segment.type === 'link') {
         nodes.push(
-          <strong key={`${keyPrefix}-b-${boldIndex}`}>{boldMatch[1]}</strong>
+          <a
+            key={`${keyPrefix}-lnk-${segmentIndex}`}
+            href={segment.url}
+            className="chatbot-widget__msg-link"
+            onClick={(e) => handleAssistantLinkClick(segment.url, e)}
+          >
+            {segment.label}
+          </a>
         );
         return;
       }
 
-      const italicParts = boldPart.split(/(\*[^*]+\*)/g);
-      italicParts.forEach((italicPart, italicIndex) => {
-        const italicMatch = italicPart.match(/^\*([^*]+)\*$/);
-        if (italicMatch) {
+      const boldParts = String(segment.value).split(/(\*\*[^*]+\*\*)/g);
+      boldParts.forEach((boldPart, boldIndex) => {
+        const boldMatch = boldPart.match(/^\*\*([^*]+)\*\*$/);
+        if (boldMatch) {
           nodes.push(
-            <em key={`${keyPrefix}-i-${boldIndex}-${italicIndex}`}>{italicMatch[1]}</em>
+            <strong key={`${keyPrefix}-b-${segmentIndex}-${boldIndex}`}>{boldMatch[1]}</strong>
           );
-        } else if (italicPart) {
-          nodes.push(
-            <React.Fragment key={`${keyPrefix}-t-${boldIndex}-${italicIndex}`}>
-              {italicPart}
-            </React.Fragment>
-          );
+          return;
         }
+
+        const italicParts = boldPart.split(/(\*[^*]+\*)/g);
+        italicParts.forEach((italicPart, italicIndex) => {
+          const italicMatch = italicPart.match(/^\*([^*]+)\*$/);
+          if (italicMatch) {
+            nodes.push(
+              <em key={`${keyPrefix}-i-${segmentIndex}-${boldIndex}-${italicIndex}`}>{italicMatch[1]}</em>
+            );
+          } else if (italicPart) {
+            nodes.push(
+              <React.Fragment key={`${keyPrefix}-t-${segmentIndex}-${boldIndex}-${italicIndex}`}>
+                {italicPart}
+              </React.Fragment>
+            );
+          }
+        });
       });
     });
 

@@ -334,6 +334,19 @@
   border-bottom-left-radius: 3px;
 }
 
+.chatbot-widget__msg-link {
+  color: #0b57d0;
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.chatbot-widget__msg-link:hover {
+  color: #0a47aa;
+}
+
 /* ── Typing indicator ─────────────────────────────────────── */
 .chatbot-widget__msg--typing {
   display: flex;
