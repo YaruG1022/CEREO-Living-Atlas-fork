@@ -9,7 +9,7 @@ import os
 import re
 import time
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 from urllib.parse import quote, urlencode
 
 import requests
@@ -21,7 +21,7 @@ class SkillResult:
     used: bool
     context_block: str
     warning: str = ""
-    navigation_links: List[dict] = None
+    navigation_links: Optional[List[dict]] = None
 
 
 @dataclass
@@ -196,8 +196,16 @@ class ArcGISServiceCatalogSkill(BaseSkill):
         }
         clean_params = {k: v for k, v in params.items() if v}
         url = f"atlas-upload://open?{urlencode(clean_params)}"
+        display_service_name = service_name.split('/')[-1] if service_name else ""
+        if not title:
+            if display_service_name:
+                title = display_service_name
+            elif folder_name:
+                title = folder_name
+            else:
+                title = "Open in Upload Panel"
         return {
-            "title": title or "Open in Upload Panel",
+            "title": title,
             "url": url,
             "stateCode": state_code,
             "folderName": folder_name,
@@ -280,7 +288,6 @@ class ArcGISServiceCatalogSkill(BaseSkill):
                                     state_code=guessed_state,
                                     folder_name=folder,
                                     service_name=svc_name,
-                                    title=f"Open {svc_name} in Upload Panel",
                                 )
                             )
 
@@ -321,7 +328,6 @@ class ArcGISServiceCatalogSkill(BaseSkill):
                         self._build_upload_link(
                             state_code=self._guess_state_code(folder, ""),
                             folder_name=folder,
-                            title=f"Open folder {folder} in Upload Panel",
                         )
                     )
 
@@ -339,7 +345,6 @@ class ArcGISServiceCatalogSkill(BaseSkill):
                         self._build_upload_link(
                             state_code=self._guess_state_code("", svc_name),
                             service_name=svc_name,
-                            title=f"Open {svc_name} in Upload Panel",
                         )
                     )
 

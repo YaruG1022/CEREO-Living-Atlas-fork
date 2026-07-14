@@ -1000,6 +1000,7 @@ function ArcgisUploadPanel({
         const desiredFolderName = navigateToItem.folderName || null;
         const desiredServiceKey = navigateToItem.serviceKey || null;
         const desiredServiceName = navigateToItem.serviceName || null;
+        const desiredServiceLeafName = desiredServiceName ? String(desiredServiceName).split('/').pop() : null;
 
         const scopedCandidates = ARCGIS_SERVICES.filter((service) => {
             const stateMatches = !desiredStateCode
@@ -1008,6 +1009,10 @@ function ArcgisUploadPanel({
                 || String(service.folder || '').toLowerCase() === String(desiredFolderName).toLowerCase();
             return stateMatches && folderMatches;
         });
+        const stateOnlyCandidates = ARCGIS_SERVICES.filter((service) => {
+            return !desiredStateCode
+                || (service.state || '').toLowerCase() === (STATE_CODE_TO_NAME[desiredStateCode] || '').toLowerCase();
+        });
 
         let resolvedService = null;
         if (desiredServiceKey) {
@@ -1015,10 +1020,26 @@ function ArcgisUploadPanel({
         }
         if (!resolvedService && desiredServiceName) {
             const targetName = normalizeLookupText(desiredServiceName);
+            const targetLeaf = normalizeLookupText(desiredServiceLeafName);
             resolvedService = scopedCandidates.find((service) => {
                 const label = normalizeLookupText(service.label);
                 const key = normalizeLookupText(service.key);
-                return label === targetName || label.includes(targetName) || key === targetName;
+                return label === targetName
+                    || label.includes(targetName)
+                    || key === targetName
+                    || (targetLeaf && (label === targetLeaf || label.includes(targetLeaf) || key.includes(targetLeaf)));
+            }) || null;
+        }
+        if (!resolvedService && desiredServiceName) {
+            const targetName = normalizeLookupText(desiredServiceName);
+            const targetLeaf = normalizeLookupText(desiredServiceLeafName);
+            resolvedService = stateOnlyCandidates.find((service) => {
+                const label = normalizeLookupText(service.label);
+                const key = normalizeLookupText(service.key);
+                return label === targetName
+                    || label.includes(targetName)
+                    || key === targetName
+                    || (targetLeaf && (label === targetLeaf || label.includes(targetLeaf) || key.includes(targetLeaf)));
             }) || null;
         }
         if (!resolvedService && scopedCandidates.length > 0) {
@@ -1028,7 +1049,12 @@ function ArcgisUploadPanel({
         const resolvedStateCode = desiredStateCode || (resolvedService
             ? (Object.entries(STATE_CODE_TO_NAME).find(([, name]) => name === (resolvedService.state || '').toLowerCase())?.[0] || 'WA')
             : 'WA');
-        const resolvedFolderName = desiredFolderName || resolvedService?.folder || null;
+        const folderExistsInState = desiredFolderName
+            ? (servicesByStateAndFolder[resolvedStateCode]?.folderNames || []).some(
+                folder => String(folder).toLowerCase() === String(desiredFolderName).toLowerCase()
+            )
+            : false;
+        const resolvedFolderName = resolvedService?.folder || (folderExistsInState ? desiredFolderName : null);
         const resolvedServiceKey = resolvedService?.key || desiredServiceKey || null;
 
         pendingNavigateRef.current = {

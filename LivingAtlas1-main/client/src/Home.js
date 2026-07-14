@@ -153,11 +153,15 @@ function Home(props) {
         const handler = (e) => {
             setIsUploadPanelOpen(true);
             setIsCustomLayerPanelOpen(false);
+            setIsBasemapOpen(false);
+            if (chatbotDisplayMode === 'sidebar') {
+                setIsChatbotOpen(false);
+            }
             setArcgisNavigateTarget(e.detail);
         };
         window.addEventListener('open-arcgis-panel', handler);
         return () => window.removeEventListener('open-arcgis-panel', handler);
-    }, []);
+    }, [chatbotDisplayMode]);
 
     // Fetch layers and legend for demo folder/item
     useEffect(() => {
@@ -424,16 +428,25 @@ function Home(props) {
         setIsUploadPanelOpen(true);
         setIsCustomLayerPanelOpen(false);
         setIsBasemapOpen(false);
+        if (chatbotDisplayMode === 'sidebar') {
+            setIsChatbotOpen(false);
+        }
     };
     const ensureCustomLayersPanelOpen = () => {
         setIsCustomLayerPanelOpen(true);
         setIsUploadPanelOpen(false);
         setIsBasemapOpen(false);
+        if (chatbotDisplayMode === 'sidebar') {
+            setIsChatbotOpen(false);
+        }
     };
     const ensureBasemapPanelOpen = () => {
         setIsUploadPanelOpen(false);
         setIsCustomLayerPanelOpen(false);
         setIsBasemapOpen(true);
+        if (chatbotDisplayMode === 'sidebar') {
+            setIsChatbotOpen(false);
+        }
     };
 
     const getFeatureCatalog = () => ([
@@ -896,11 +909,24 @@ function Home(props) {
 
     const toggleSidebarChatbotPanel = () => {
         if (chatbotDisplayMode === 'floating') return;
-        setIsChatbotOpen(prev => !prev);
+        setIsChatbotOpen(prev => {
+            const next = !prev;
+            if (next) {
+                setIsUploadPanelOpen(false);
+                setIsCustomLayerPanelOpen(false);
+                setIsBasemapOpen(false);
+            }
+            return next;
+        });
     };
 
     const handleChatbotDisplayModeChange = (nextMode) => {
         setChatbotDisplayMode(nextMode);
+        if (nextMode === 'sidebar') {
+            setIsUploadPanelOpen(false);
+            setIsCustomLayerPanelOpen(false);
+            setIsBasemapOpen(false);
+        }
         setIsChatbotOpen(true);
     };
 
@@ -1204,7 +1230,15 @@ function Home(props) {
                 <button
                     className={`left-sidebar-gis-button${isUploadPanelOpen ? ' active' : ''}`}
                     data-onboarding-target="left-sidebar-gis"
-                    onClick={() => { setIsUploadPanelOpen(v => !v); setIsCustomLayerPanelOpen(false); setIsBasemapOpen(false); }}
+                    onClick={() => {
+                        setIsUploadPanelOpen(v => {
+                            const next = !v;
+                            if (next && chatbotDisplayMode === 'sidebar') setIsChatbotOpen(false);
+                            return next;
+                        });
+                        setIsCustomLayerPanelOpen(false);
+                        setIsBasemapOpen(false);
+                    }}
                     title="Toggle Layers"
                 >
                     <FontAwesomeIcon icon={faLayerGroup} />
@@ -1229,7 +1263,15 @@ function Home(props) {
                 <button
                     className={`left-sidebar-customlayers-button${isCustomLayerPanelOpen ? ' active' : ''}`}
                     data-onboarding-target="left-sidebar-customlayers"
-                    onClick={() => { setIsCustomLayerPanelOpen(v => !v); setIsUploadPanelOpen(false); setIsBasemapOpen(false); }}
+                    onClick={() => {
+                        setIsCustomLayerPanelOpen(v => {
+                            const next = !v;
+                            if (next && chatbotDisplayMode === 'sidebar') setIsChatbotOpen(false);
+                            return next;
+                        });
+                        setIsUploadPanelOpen(false);
+                        setIsBasemapOpen(false);
+                    }}
                     title="Custom Layers"
                 >
                     <FontAwesomeIcon icon={faObjectGroup} />
@@ -1253,6 +1295,9 @@ function Home(props) {
                         setIsUploadPanelOpen(false);
                         setIsCustomLayerPanelOpen(false);
                         setIsBasemapOpen(v => (shouldForceOpen ? true : !v));
+                        if (chatbotDisplayMode === 'sidebar') {
+                            setIsChatbotOpen(false);
+                        }
                     }}
                     title="Change Basemap"
                 >
