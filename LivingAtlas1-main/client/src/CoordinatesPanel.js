@@ -48,6 +48,27 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
         }))
     );
     const [openIconPicker, setOpenIconPicker] = useState(null); // index whose picker is open
+    const [iconPickerPos, setIconPickerPos] = useState(null); // { top, left } fixed-position anchor
+
+    const toggleIconPicker = (index, e) => {
+        if (openIconPicker === index) {
+            setOpenIconPicker(null);
+            return;
+        }
+        const rect = e.currentTarget.getBoundingClientRect();
+        const MENU_WIDTH = 192;
+        const MENU_MAX_HEIGHT = 200;
+        let left = rect.right + 8;
+        if (left + MENU_WIDTH > window.innerWidth - 8) {
+            left = Math.max(8, rect.left - MENU_WIDTH - 8);
+        }
+        let top = rect.top;
+        if (top + MENU_MAX_HEIGHT > window.innerHeight - 8) {
+            top = Math.max(8, window.innerHeight - 8 - MENU_MAX_HEIGHT);
+        }
+        setIconPickerPos({ top, left });
+        setOpenIconPicker(index);
+    };
 
     // Marker style shared by all points
     const [markerColor, setMarkerColor] = useState(() => normalizeHexColor(initialPoints[0]?.color || MARKER_ICON_COLOR));
@@ -70,6 +91,19 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
 
     const markersRef = useRef([]);
     const panelRef = useRef(null);
+    const iconMenuRef = useRef(null);
+
+    // Close the floating icon menu when clicking anywhere outside it.
+    useEffect(() => {
+        if (openIconPicker == null) return;
+        const onDocMouseDown = (e) => {
+            if (iconMenuRef.current && iconMenuRef.current.contains(e.target)) return;
+            if (e.target.closest && e.target.closest('.coordinates-panel-icon-btn')) return;
+            setOpenIconPicker(null);
+        };
+        document.addEventListener('mousedown', onDocMouseDown);
+        return () => document.removeEventListener('mousedown', onDocMouseDown);
+    }, [openIconPicker]);
 
     // Always-current refs, safe to read from stale closures / map handlers
     const pointsRef = useRef(points);
@@ -620,7 +654,7 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
                                     type="button"
                                     className={`coordinates-panel-icon-btn${openIconPicker === index ? ' active' : ''}`}
                                     title="Choose icon"
-                                    onClick={() => setOpenIconPicker(openIconPicker === index ? null : index)}
+                                    onClick={(e) => toggleIconPicker(index, e)}
                                 >
                                     <MarkerIconGlyph optionKey={p.icon} />
                                 </button>
@@ -635,29 +669,37 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
                                 &times;
                             </button>
                         </div>
-
-                        {openIconPicker === index && (
-                            <div className="coordinates-panel-icon-grid">
-                                {MARKER_ICON_OPTIONS.map(opt => (
-                                    <button
-                                        type="button"
-                                        key={opt.key}
-                                        className={`coordinates-panel-icon-option${opt.key === p.icon ? ' active' : ''}`}
-                                        title={opt.label}
-                                        onClick={() => {
-                                            saveToHistoryRef.current?.();
-                                            updatePoint(index, { icon: opt.key });
-                                            setOpenIconPicker(null);
-                                        }}
-                                    >
-                                        <MarkerIconGlyph optionKey={opt.key} />
-                                    </button>
-                                ))}
-                            </div>
-                        )}
                     </React.Fragment>
                 ))}
             </div>
+
+            {/* Floating icon picker menu (rendered outside the scrolling list) */}
+            {openIconPicker != null && points[openIconPicker] && iconPickerPos && ReactDOM.createPortal(
+                <div
+                    className="coordinates-panel-icon-menu"
+                    ref={iconMenuRef}
+                    style={{ top: iconPickerPos.top, left: iconPickerPos.left }}
+                >
+                    <div className="coordinates-panel-icon-grid">
+                        {MARKER_ICON_OPTIONS.map(opt => (
+                            <button
+                                type="button"
+                                key={opt.key}
+                                className={`coordinates-panel-icon-option${opt.key === points[openIconPicker].icon ? ' active' : ''}`}
+                                title={opt.label}
+                                onClick={() => {
+                                    saveToHistoryRef.current?.();
+                                    updatePoint(openIconPicker, { icon: opt.key });
+                                    setOpenIconPicker(null);
+                                }}
+                            >
+                                <MarkerIconGlyph optionKey={opt.key} />
+                            </button>
+                        ))}
+                    </div>
+                </div>,
+                document.body
+            )}
 
             <div className="polygon-draw-modal-actions">
                 <button

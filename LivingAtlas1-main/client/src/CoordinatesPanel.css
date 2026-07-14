@@ -36,15 +36,27 @@
     background: #fdecea;
 }
 
+/* Floating icon picker menu — a standalone popup (portal to body), styled like the
+   toolbar dropdowns, so it doesn't take up space inside the Add Points panel. */
+.coordinates-panel-icon-menu {
+    position: fixed;
+    z-index: 10000;
+    width: 192px;
+    background: #fff;
+    border-radius: 4px;
+    box-shadow: 0 0 0 2px rgba(0, 0, 0, .1), 0 4px 12px rgba(0, 0, 0, .15);
+    padding: 2px;
+}
+
 .coordinates-panel-icon-grid {
     display: grid;
     grid-template-columns: repeat(6, 1fr);
     gap: 3px;
     padding: 5px 6px 7px;
-    margin: 0 2px 6px 22px;
-    background: #f7f8fa;
-    border: 1px solid #e5e7eb;
+    background: #fff;
     border-radius: 4px;
+    max-height: 180px;
+    overflow-y: auto;
 }
 
 .coordinates-panel-icon-option {
