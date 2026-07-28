@@ -18,7 +18,8 @@ import { useLayerContextMenu, LayerContextMenuPopup } from './LayerContextMenu';
 import { ServiceInfoModal, LayerInfoModal } from './ArcgisInfoModals';
 import './CustomLayersPanel.css';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faTimes, faSearch, faFolderPlus, faChevronUp, faChevronDown, faQuestion, faEllipsisV, faPlay, faEye } from '@fortawesome/free-solid-svg-icons';
+import { faTimes, faSearch, faFolderPlus, faChevronUp, faChevronDown, faQuestion, faEllipsisV, faPlay, faEye, faUpload } from '@fortawesome/free-solid-svg-icons';
+import { parseGeoFile } from './geoFileUtils';
 import { faFolder } from '@fortawesome/free-regular-svg-icons';
 import ClearAllLayersButton from './ClearAllLayersButton';
 import CustomLayersPanelOnboarding from './OnboardingCustomLayersPanel';
@@ -77,6 +78,16 @@ function CustomLayersPanel({
     // Rename state
     const [renamingItem, setRenamingItem] = useState(null);
 
+    // Uploaded file layers stored entirely in localStorage
+    const UPLOADED_LAYERS_META_KEY = 'custom_layers_uploaded_meta';
+    const getUploadedLayersMeta = () => {
+        try { return JSON.parse(localStorage.getItem(UPLOADED_LAYERS_META_KEY) || '[]'); }
+        catch { return []; }
+    };
+    const saveUploadedLayersMeta = (list) => localStorage.setItem(UPLOADED_LAYERS_META_KEY, JSON.stringify(list));
+
+    const uploadInputRef = useRef(null);
+
     // Pin state (separate storage key from upload panel)
     const PINNED_STORAGE_KEY = 'custom_layers_pinned_items';
     const loadPinnedItems = () => {
@@ -133,9 +144,26 @@ function CustomLayersPanel({
                     fetchCustomFolders(userEmail),
                 ]);
                 if (active) {
+                    const uploadedMeta = getUploadedLayersMeta();
+                    const uploadedServices = uploadedMeta.map(m => ({
+                        key: m.key,
+                        label: m.label,
+                        url: `local://${m.key}`,
+                        type: 'uploaded',
+                        folder: m.folder || 'Root',
+                        sort_order: m.sort_order || 0,
+                        state: '',
+                    }));
+                    const uploadedLayerStates = {};
+                    uploadedMeta.forEach(m => {
+                        uploadedLayerStates[m.key] = [{ id: 0, name: m.label, type: 'Feature Layer' }];
+                    });
                     unstable_batchedUpdates(() => {
-                        setCustomServices(layers);
+                        setCustomServices([...layers, ...uploadedServices]);
                         setDbFolders(folders);
+                        if (Object.keys(uploadedLayerStates).length > 0) {
+                            setServiceLayers(prev => ({ ...prev, ...uploadedLayerStates }));
+                        }
                         setIsLoading(false);
                     });
                     loadedKeyRef.current = loadKey;
@@ -453,6 +481,37 @@ function CustomLayersPanel({
         if (!map) return;
 
         customServices.forEach(service => {
+            // --- UPLOADED FILE LAYERS (GeoJSON/KML/Shapefile) ---
+            if (service.type === 'uploaded') {
+                const prevChecked = prevCheckedLayerIds.current[service.key] || [];
+                const currChecked = checkedLayerIds[service.key] || [];
+                const wasOn = prevChecked.length > 0;
+                const isOn = currChecked.length > 0;
+                const sourceId = `uploaded-source-${service.key}`;
+
+                if (wasOn && !isOn) {
+                    [`uploaded-fill-${service.key}`, `uploaded-line-${service.key}`, `uploaded-circle-${service.key}`].forEach(lid => {
+                        if (map.getLayer(lid)) map.removeLayer(lid);
+                    });
+                    if (map.getSource(sourceId)) map.removeSource(sourceId);
+                } else if (!wasOn && isOn) {
+                    try {
+                        const rawGeojson = localStorage.getItem(`uploaded_geojson_${service.key}`);
+                        if (rawGeojson && !map.getSource(sourceId)) {
+                            const geojson = JSON.parse(rawGeojson);
+                            map.addSource(sourceId, { type: 'geojson', data: geojson });
+                            map.addLayer({ id: `uploaded-fill-${service.key}`, type: 'fill', source: sourceId, paint: { 'fill-color': '#3388ff', 'fill-opacity': layerOpacity * 0.35 } });
+                            map.addLayer({ id: `uploaded-line-${service.key}`, type: 'line', source: sourceId, paint: { 'line-color': '#1a66ff', 'line-width': 2, 'line-opacity': layerOpacity } });
+                            map.addLayer({ id: `uploaded-circle-${service.key}`, type: 'circle', source: sourceId, filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 5, 'circle-color': '#3388ff', 'circle-opacity': layerOpacity } });
+                        }
+                    } catch (err) {
+                        console.warn('[CustomLayersPanel] Failed to add uploaded layer to map:', err);
+                    }
+                }
+                prevCheckedLayerIds.current[service.key] = currChecked;
+                return; // skip ArcGIS handling for uploaded layers
+            }
+
             const layers = serviceLayers[service.key] || [];
             const prevChecked = prevCheckedLayerIds.current[service.key] || [];
             const currChecked = checkedLayerIds[service.key] || [];
@@ -606,6 +665,12 @@ function CustomLayersPanel({
                 } else if (l.type === 'circle') {
                     map.setPaintProperty(l.id, 'circle-opacity', newOpacity);
                 }
+            } else if (l.id.startsWith('uploaded-fill-')) {
+                map.setPaintProperty(l.id, 'fill-opacity', newOpacity * 0.35);
+            } else if (l.id.startsWith('uploaded-line-')) {
+                map.setPaintProperty(l.id, 'line-opacity', newOpacity);
+            } else if (l.id.startsWith('uploaded-circle-')) {
+                map.setPaintProperty(l.id, 'circle-opacity', newOpacity);
             }
         });
     };
@@ -649,6 +714,16 @@ function CustomLayersPanel({
     const removeAllMapLayers = useCallback((service) => {
         const map = mapInstance && mapInstance();
         if (!map) return;
+
+        if (service.type === 'uploaded') {
+            [`uploaded-fill-${service.key}`, `uploaded-line-${service.key}`, `uploaded-circle-${service.key}`].forEach(lid => {
+                if (map.getLayer(lid)) map.removeLayer(lid);
+            });
+            const sourceId = `uploaded-source-${service.key}`;
+            if (map.getSource(sourceId)) map.removeSource(sourceId);
+            return;
+        }
+
         const layers = serviceLayers[service.key] || [];
         layers.forEach(layer => {
             // Vector
@@ -855,9 +930,11 @@ function CustomLayersPanel({
 
     const handleServiceRename = (serviceKey, newLabel) => {
         if (!newLabel || newLabel.trim() === '') return;
-        setCustomServices(prev => prev.map(s =>
-            s.key === serviceKey ? { ...s, label: newLabel } : s
-        ));
+        setCustomServices(prev => prev.map(s => s.key === serviceKey ? { ...s, label: newLabel } : s));
+        const service = customServices.find(s => s.key === serviceKey);
+        if (service?.type === 'uploaded') {
+            saveUploadedLayersMeta(getUploadedLayersMeta().map(m => m.key === serviceKey ? { ...m, label: newLabel } : m));
+        }
     };
 
     // --- Drag-and-drop reorder ---
@@ -1038,6 +1115,32 @@ function CustomLayersPanel({
         handleLayerDragEnd();
     }, [dragLayerItem, serviceLayers, layerOrder, userEmail, handleLayerDragEnd]);
 
+    // --- File upload (GeoJSON / KML / Shapefile ZIP) ---
+    const handleFileUpload = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        e.target.value = '';
+        try {
+            const geojson = await parseGeoFile(file);
+            const key = `uploaded_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+            const label = file.name.replace(/\.(geojson|json|kml|zip)$/i, '');
+            const folder = currentPath || 'Root';
+            localStorage.setItem(`uploaded_geojson_${key}`, JSON.stringify(geojson));
+            saveUploadedLayersMeta([...getUploadedLayersMeta(), { key, label, folder, sort_order: Date.now() }]);
+            const newService = { key, label, url: `local://${key}`, type: 'uploaded', folder, sort_order: Date.now(), state: '' };
+            unstable_batchedUpdates(() => {
+                setCustomServices(prev => [...prev, newService]);
+                setServiceLayers(prev => ({ ...prev, [key]: [{ id: 0, name: label, type: 'Feature Layer' }] }));
+                setCheckedLayerIds(prev => ({ ...prev, [key]: [] }));
+                setCheckedSublayerIds(prev => ({ ...prev, [key]: {} }));
+                setServiceLayerAdded(prev => ({ ...prev, [key]: false }));
+            });
+            showStatus(`Uploaded "${label}"`);
+        } catch (err) {
+            showStatus(`Upload failed: ${err.message}`);
+        }
+    };
+
     // --- Folder management ---
     const handleCreateFolder = async () => {
         const name = prompt('Enter new folder name:');
@@ -1087,7 +1190,12 @@ function CustomLayersPanel({
         const service = contextMenu.data.service;
         closeContextMenu();
         try {
-            await deleteCustomLayer(userEmail, service.key);
+            if (service.type === 'uploaded') {
+                localStorage.removeItem(`uploaded_geojson_${service.key}`);
+                saveUploadedLayersMeta(getUploadedLayersMeta().filter(m => m.key !== service.key));
+            } else {
+                await deleteCustomLayer(userEmail, service.key);
+            }
             removeAllMapLayers(service);
             setCustomServices(prev => prev.filter(s => s.key !== service.key));
             setServiceLayerAdded(prev => { const n = { ...prev }; delete n[service.key]; return n; });
@@ -1114,7 +1222,7 @@ function CustomLayersPanel({
         if (!contextMenu) return;
         const { type, data } = contextMenu;
         if (type === 'service') {
-            openServiceInfo(data.service);
+            if (data.service.type !== 'uploaded') openServiceInfo(data.service);
         } else if (type === 'layer') {
             openLayerInfo(data.service, data.layer);
         }
@@ -1430,6 +1538,21 @@ function CustomLayersPanel({
                             <FontAwesomeIcon icon={faFolderPlus} />
                             <span>New Folder</span>
                         </button>
+                        <button
+                            className="clear-all-layers-btn custom-layers-panel-upload-btn"
+                            onClick={() => uploadInputRef.current?.click()}
+                            title="Upload GeoJSON, KML, or Shapefile (.zip)"
+                        >
+                            <FontAwesomeIcon icon={faUpload} />
+                            <span>Upload File</span>
+                        </button>
+                        <input
+                            ref={uploadInputRef}
+                            type="file"
+                            accept=".geojson,.json,.kml,.zip"
+                            style={{ display: 'none' }}
+                            onChange={handleFileUpload}
+                        />
                         <button
                             type="button"
                             data-onboarding-target="custom-layers-show-added-button"

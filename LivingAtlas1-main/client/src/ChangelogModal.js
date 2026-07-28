@@ -43,6 +43,30 @@ function ChangelogModal({ isOpen, onClose }) {
                           <li>Improved reliability for ArcGIS live fetches with 403 mitigation logic, including request-header profiles, endpoint fallback attempts, and clearer diagnostics.</li>
                         </ul>
 
+                        <h4>Chatbot Navigation Links</h4>
+                        <ul className="changelog-list">
+                          <li>Chatbot answers can now include quick navigation links that take you straight to the matching item in the GIS Services panel — clicking a link opens the panel and highlights the referenced folder, service, or layer.</li>
+                        </ul>
+
+                        <h4>Add Points Panel</h4>
+                        <ul className="changelog-list">
+                          <li>Expanded the marker icon menu with 30 additional Font Awesome options covering nature, wildlife, weather, activity, and monitoring themes.</li>
+                        </ul>
+
+                        <h4>Card Learn More – Pinned ArcGIS Layers</h4>
+                        <ul className="changelog-list">
+                          <li>Added a pin button to the Linked ArcGIS Services/Layers section: pinned services/layers always stay open on the map, and pin choices are saved to your account so they load automatically on future visits.</li>
+                        </ul>
+
+                        <h4>Service & Layer Info Modals</h4>
+                        <ul className="changelog-list">
+                          <li>Added a Layer Opacity slider to the Layer Info modal (same control as the Service Info modal) that adjusts only the selected layer.</li>
+                          <li>Added a Download Image button to the Layer Info modal that saves the layer's raster image for the current map view as a PNG.</li>
+                          <li>Added a dual-handle Zoom Range slider to the Layer Info modal, with two draggable points controlling the minimum and maximum zoom levels at which the layer is displayed.</li>
+                          <li>Improved the Filter by Field feature: filters now also apply to the raster tiles server-side, so non-matching areas are removed from the raster image instead of only from the clickable vector overlay.</li>
+                          <li>Unified the Service Info and Layer Info modals of the GIS Services panel and the Custom Layers panel into one shared implementation, bringing the Custom Layers panel up to date with all recent additions (Historical View time filter, layer opacity, zoom range, image download, and raster-aware filtering).</li>
+                        </ul>
+
                         <h4>Bug Fixes</h4>
                         <ul className="changelog-list">
                           <li>Fixed the misaligned update notification dot that appeared at the top of the left sidebar instead of on the corner of the bell icon.</li>

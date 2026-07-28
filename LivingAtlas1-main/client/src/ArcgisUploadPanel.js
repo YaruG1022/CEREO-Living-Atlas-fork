@@ -166,8 +166,12 @@ function ArcgisUploadPanel({
     // Services fetched from DB
     const [servicesFromDb, setServicesFromDb] = useState({});
     const [isLoadingServices, setIsLoadingServices] = useState(false);
-    const [servicesError, setServicesError] = useState(null);
+    const [, setServicesError] = useState(null);
     const [usingFallback, setUsingFallback] = useState(false);
+    // True once the first DB services fetch attempt (success or fallback) has
+    // finished, so pin auto-load can wait for authoritative service data
+    // instead of matching against the static fallback list prematurely.
+    const [servicesInitialLoadDone, setServicesInitialLoadDone] = useState(false);
 
     // Combine all states; prefer DB data, fall back to local JSON when DB is unavailable
     const ALL_SERVICES_BY_STATE = {};
@@ -249,6 +253,11 @@ function ArcgisUploadPanel({
     // Direct layer toggle (from learn-more modal checkboxes — no panel open required)
     const pendingDirectTogglesRef = useRef([]);
     const [directToggleTick, setDirectToggleTick] = useState(0);
+    // Bumped once the Mapbox map + style are ready, so layer-rendering effects that
+    // ran too early (e.g. auto-loading pinned layers right after a page refresh)
+    // get re-run and actually add their layers.
+    const [mapReadyTick, setMapReadyTick] = useState(0);
+    const mapReadyListenerRef = useRef(false);
 
     // Persistence: track whether saved selections have been loaded for current state/datasource
     const selectionsLoadedRef = useRef(false);
@@ -477,9 +486,11 @@ function ArcgisUploadPanel({
     const [updateProgress, setUpdateProgress] = useState('');
     const [updateResults, setUpdateResults] = useState(null);
 
-    // Fetch services from DB on first panel open; skip on subsequent opens unless fallback was used
+    // Fetch services from DB on mount (not gated on panel open, so pinned
+    // services/layers that only exist in the DB can be matched and auto-loaded
+    // before the panel is ever opened); retries on subsequent opens if the
+    // fallback was used.
     useEffect(() => {
-        if (!isOpen) return;
         // Skip if already successfully loaded from backend
         if (servicesLoadedRef.current) return;
 
@@ -519,6 +530,7 @@ function ArcgisUploadPanel({
             } finally {
                 if (active) {
                     setIsLoadingServices(false);
+                    setServicesInitialLoadDone(true);
                 }
             }
         })();
@@ -727,7 +739,9 @@ function ArcgisUploadPanel({
 
     // --- Pinned items: user preference-backed auto-load ---
     useEffect(() => {
-        if (!isOpen) return;
+        // Load pinned preferences on mount (not gated on panel open) so pinned
+        // services/layers can auto-load onto the map after a page refresh /
+        // backend restart even before the panel is ever opened.
         // Skip if preferences were already successfully loaded
         if (preferencesLoadedRef.current) return;
 
@@ -862,20 +876,29 @@ function ArcgisUploadPanel({
         handleTogglePin();
     };
 
-    // Auto-load pinned items once services are loaded
+    // Auto-load pinned items once services are loaded.
+    // Runs regardless of whether the panel is open so pinned services/layers
+    // (including those pinned from the card learn-more modal) render on the map
+    // right after a page refresh / backend restart. The actual layer fetching +
+    // map rendering + loading spinner are handled by the direct-toggle pipeline
+    // below, which works even while the panel is closed.
     useEffect(() => {
         const pinnedItemsReady = userEmail ? pinnedPreferencesLoaded : localPinnedPreferencesReady;
 
         if (!pinnedItemsReady) return;
-        if (!isOpen || ARCGIS_SERVICES.length === 0 || pinnedItems.length === 0) return;
+        // Wait for the DB services fetch to finish (success or fallback) so pins
+        // are matched against the authoritative service list, not just whatever
+        // the static local-JSON fallback happens to contain at mount time.
+        if (!servicesInitialLoadDone) return;
+        if (ARCGIS_SERVICES.length === 0 || pinnedItems.length === 0) return;
         if (selectionsLoadedRef.current) return;
         selectionsLoadedRef.current = true;
 
         const statesToExpand = new Set();
         const foldersToExpand = new Set();
         const servicesToExpand = new Set();
-        const layerIdsToCheck = {}; // { serviceKey: [layerId, ...] }
         const sublayerIdsToCheck = {}; // { serviceKey: { layerId: [index, ...] } }
+        const togglesToDispatch = []; // { serviceKey, layerId, checked }
 
         pinnedItems.forEach(pin => {
             // Find the service across all states
@@ -892,32 +915,22 @@ function ArcgisUploadPanel({
             foldersToExpand.add(foundService.folder || 'Root');
             servicesToExpand.add(pin.serviceKey);
 
-            if (pin.layerId != null) {
-                if (!layerIdsToCheck[pin.serviceKey]) layerIdsToCheck[pin.serviceKey] = [];
-                if (!layerIdsToCheck[pin.serviceKey].includes(pin.layerId)) {
-                    layerIdsToCheck[pin.serviceKey].push(pin.layerId);
-                }
-            }
             if (pin.sublayerIndex != null && pin.layerId != null) {
                 if (!sublayerIdsToCheck[pin.serviceKey]) sublayerIdsToCheck[pin.serviceKey] = {};
                 if (!sublayerIdsToCheck[pin.serviceKey][pin.layerId]) sublayerIdsToCheck[pin.serviceKey][pin.layerId] = [];
                 sublayerIdsToCheck[pin.serviceKey][pin.layerId].push(pin.sublayerIndex);
             }
+
+            togglesToDispatch.push({ serviceKey: pin.serviceKey, layerId: pin.layerId ?? null, checked: true });
         });
 
+        // Expand the tree (helps when the user later opens the panel)
         if (statesToExpand.size > 0) setExpandedStates(statesToExpand);
         if (foldersToExpand.size > 0) setExpandedFolders(foldersToExpand);
         if (servicesToExpand.size > 0) setExpandedServices(servicesToExpand);
 
-        if (Object.keys(layerIdsToCheck).length > 0) {
-            setCheckedLayerIds(prev => {
-                const merged = { ...prev };
-                Object.entries(layerIdsToCheck).forEach(([key, ids]) => {
-                    merged[key] = [...new Set([...(merged[key] || []), ...ids])];
-                });
-                return merged;
-            });
-        }
+        // Seed sublayer selections so the map effect renders the right sublayers
+        // once the service's layers finish loading.
         if (Object.keys(sublayerIdsToCheck).length > 0) {
             setCheckedSublayerIds(prev => {
                 const merged = { ...prev };
@@ -930,14 +943,27 @@ function ArcgisUploadPanel({
                 return merged;
             });
         }
+
+        // Route pinned items through the direct-toggle pipeline. It fetches each
+        // service's layers on demand (with a loading spinner) and adds them to
+        // the map whether or not the panel is open.
+        if (togglesToDispatch.length > 0) {
+            pendingDirectTogglesRef.current = [
+                ...pendingDirectTogglesRef.current.filter(
+                    t => !togglesToDispatch.some(n => n.serviceKey === t.serviceKey && n.layerId === t.layerId)
+                ),
+                ...togglesToDispatch,
+            ];
+            setDirectToggleTick(t => t + 1);
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [
-        isOpen,
         ARCGIS_SERVICES.length,
         pinnedItems,
         pinnedPreferencesLoaded,
         localPinnedPreferencesReady,
         userEmail,
+        servicesInitialLoadDone,
     ]);
 
     // On state change: remove any ArcGIS layers/sources left from the previous state
@@ -1758,7 +1784,28 @@ function ArcgisUploadPanel({
     // Enhanced effect for checked layers: add/remove vector layers and individual sublayer rasters
     useEffect(() => {
         const map = mapInstance();
-        if (!map) return;
+
+        // On a fresh page load the Mapbox map may not exist yet (window.atlasMapInstance
+        // is created asynchronously) or its style may not be loaded. Both are common
+        // while pinned layers auto-load right after a refresh. Adding sources/layers
+        // too early either does nothing or throws — poll until the map is ready, then
+        // bump mapReadyTick so this effect re-runs and actually renders the layers.
+        if (!map || !map.isStyleLoaded || !map.isStyleLoaded()) {
+            if (!mapReadyListenerRef.current) {
+                mapReadyListenerRef.current = true;
+                const poll = () => {
+                    const m = mapInstance();
+                    if (m && m.isStyleLoaded && m.isStyleLoaded()) {
+                        mapReadyListenerRef.current = false;
+                        setMapReadyTick(t => t + 1);
+                    } else {
+                        setTimeout(poll, 250);
+                    }
+                };
+                setTimeout(poll, 250);
+            }
+            return;
+        }
 
         ARCGIS_SERVICES.forEach(service => {
             const layers = serviceLayers[service.key] || [];
@@ -1982,7 +2029,7 @@ function ArcgisUploadPanel({
             prevCheckedLayerIds.current[`${service.key}_sublayers`] = JSON.parse(JSON.stringify(serviceSublayers));
         });
         // eslint-disable-next-line
-    }, [checkedLayerIds, serviceLayers, checkedSublayerIds]); // Added checkedSublayerIds as dependency
+    }, [checkedLayerIds, serviceLayers, checkedSublayerIds, mapReadyTick]); // Added checkedSublayerIds as dependency
 
 
     // UI for search bar and dropdown

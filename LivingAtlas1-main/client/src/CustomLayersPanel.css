@@ -98,6 +98,20 @@
     background: #d8ebfb;
 }
 
+.custom-layers-panel-upload-btn {
+    font-size: 12px;
+}
+
+.custom-layers-panel-upload-btn:hover {
+    border-color: #388e3c;
+    background: #e8f5e9;
+    color: #388e3c !important;
+}
+
+.custom-layers-panel-upload-btn:active {
+    background: #dcedc8;
+}
+
 .custom-layers-panel-empty {
     text-align: center;
     padding: 32px 16px;
