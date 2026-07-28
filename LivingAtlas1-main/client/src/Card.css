@@ -1338,6 +1338,48 @@
   background: #1e40af !important;
 }
 
+.learn-more-location-type-btn-wrap {
+  position: relative;
+  display: inline-block;
+}
+.learn-more-location-type-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  min-width: 140px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+.learn-more-location-type-menu-item {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid #eee;
+  text-align: left;
+  cursor: pointer;
+  font-size: 13px;
+  color: #333;
+}
+.learn-more-location-type-menu-item:last-child {
+  border-bottom: none;
+}
+.learn-more-location-type-menu-item:hover:not(:disabled) {
+  background: #f1f5f9;
+}
+.learn-more-location-type-menu-item.active,
+.learn-more-location-type-menu-item:disabled {
+  color: #1d4ed8;
+  font-weight: 600;
+  cursor: default;
+  background: #eef2ff;
+}
+
 .learn-more-modal-body p {
   margin: 0 0 12px;
   color: #374151;
@@ -1835,44 +1877,6 @@
     height: 15px;
     cursor: pointer;
     accent-color: #2563eb;
-}
-
-/* Pin button on the left of each linked ArcGIS item */
-.learn-more-arcgis-pin-btn {
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    background: none !important;
-    border: 1px solid #cbd5e1 !important;
-    color: #94a3b8 !important;
-    width: 24px !important;
-    height: 24px !important;
-    min-width: 24px !important;
-    border-radius: 4px !important;
-    cursor: pointer !important;
-    font-size: 0.75rem !important;
-    line-height: 1 !important;
-    padding: 0 !important;
-    flex-shrink: 0 !important;
-    align-self: center !important;
-    transition: background 0.12s, color 0.12s, border-color 0.12s !important;
-    box-shadow: none !important;
-}
-
-.learn-more-arcgis-pin-btn:hover {
-    background: #f1f5f9 !important;
-    color: #334155 !important;
-    border-color: #94a3b8 !important;
-}
-
-.learn-more-arcgis-pin-btn.pinned {
-    color: #2f6fb0 !important;
-    border-color: #b9d0e6 !important;
-    background: #f6faff !important;
-}
-
-.learn-more-arcgis-pin-btn.pinned:hover {
-    background: #e8f1fa !important;
 }
 
 /* Checkbox label wrapper for linked ArcGIS layer toggle */

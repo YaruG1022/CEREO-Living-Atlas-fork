@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import ReactDOM from 'react-dom';
 import Modal from 'react-modal';
-import mapboxgl from 'mapbox-gl';
 import api from './api.js';
 import { fetchArcgisLegend } from './arcgisDataUtils';
 import './Card.css';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faHeart as solidHeart, faMagnifyingGlass, faPenToSquare, faTrashCan, faDownload, faThumbtack } from '@fortawesome/free-solid-svg-icons';
+import { faHeart as solidHeart, faMagnifyingGlass, faPenToSquare, faTrashCan, faDownload } from '@fortawesome/free-solid-svg-icons';
 import { jsPDF } from 'jspdf';
 import { faHeart as regularHeart, faQuestionCircle, faCirclePlay } from '@fortawesome/free-regular-svg-icons';
-import { fetchUserPreferences, saveUserPreferences } from './userPreferencesApi';
+import { fetchUserPreferences } from './userPreferencesApi';
 import PolygonDrawingModal from './PolygonDrawingModal';
+import CoordinatesPanel from './CoordinatesPanel';
 import ArcGISPickerModal from './ArcGISPickerModal';
 import CustomLayerPickerModal from './CustomLayerPickerModal';
 import LearnMoreOnboarding, { LEARN_MORE_EDIT_MODE_STEP } from './OnboardingLearnMore';
@@ -88,12 +88,15 @@ function Card(props) {
     const [pendingImageSlotIndex, setPendingImageSlotIndex] = useState(null);
     const [sessionUploadedImageIDs, setSessionUploadedImageIDs] = useState([]);
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
-    const [isSelectingLocation, setIsSelectingLocation] = useState(false);
     const [isEditingPolygon, setIsEditingPolygon] = useState(false);
-    const [isConvertingToPolygon, setIsConvertingToPolygon] = useState(false);
+    // True while converting a point/coordinate card to polygon or image (blank slate),
+    // as opposed to editing an existing polygon/image card's own vertices.
+    const [isConvertingLocationType, setIsConvertingLocationType] = useState(false);
+    const [isEditingCoordinate, setIsEditingCoordinate] = useState(false);
+    const [isLocationTypeMenuOpen, setIsLocationTypeMenuOpen] = useState(false);
     const isEditingRef = useRef(false); // Track editing state across renders
     const learnMoreImageInputRef = useRef(null);
-    const selectLocationMarker = useRef(null);
+    const locationTypeMenuRef = useRef(null);
     const [formData, setFormData] = useState({
         ...props.formData,
         files: props.formData?.files || [],      // <-- ensure files array always exists
@@ -279,35 +282,6 @@ function Card(props) {
             .catch(err => console.warn('Failed to save custom layer visibility:', err));
     };
 
-    const handleToggleArcgisPin = (item) => {
-        const email = localStorage.getItem('email') || '';
-        if (!props.isLoggedIn || !email) {
-            setShowLoginPrompt(true);
-            return;
-        }
-        const isPinnedNow = pinnedArcgisItems.some(pin => pinMatchesLinkedItem(pin, item));
-        const next = isPinnedNow
-            ? pinnedArcgisItems.filter(pin => !pinMatchesLinkedItem(pin, item))
-            : [...pinnedArcgisItems, {
-                serviceKey: item.service_key,
-                layerId: item.layer_id ?? null,
-                sublayerIndex: item.sublayer_index ?? null,
-            }];
-        setPinnedArcgisItems(next);
-        saveUserPreferences(email, { arcgis: { pinnedItems: next } })
-            .catch(err => console.warn('Failed to save pinned ArcGIS preferences:', err));
-        // Keep the upload panel's pin state in sync if it's mounted
-        window.dispatchEvent(new CustomEvent('arcgis-pinned-items-changed', {
-            detail: { pinnedItems: next },
-        }));
-        if (!isPinnedNow) {
-            // Newly pinned layers always stay open on the map
-            setLinkedArcgisChecked(prev => ({ ...prev, [item.id]: true }));
-            window.dispatchEvent(new CustomEvent('arcgis-layer-toggle', {
-                detail: { serviceKey: item.service_key, layerId: item.layer_id, checked: true },
-            }));
-        }
-    };
     // Ensure username and name always have safe defaults
     // Now handled by handleEdit
     /* useEffect(() => {
@@ -340,7 +314,19 @@ function Card(props) {
         }
     };
 
-    const isLearnMoreModalVisible = isModalOpen && !isSelectingLocation && !isEditingPolygon;
+    const isLearnMoreModalVisible = isModalOpen && !isEditingPolygon && !isEditingCoordinate;
+
+    // Close the "Change location type" menu on outside click
+    useEffect(() => {
+        if (!isLocationTypeMenuOpen) return;
+        const handleClickOutside = (e) => {
+            if (locationTypeMenuRef.current && !locationTypeMenuRef.current.contains(e.target)) {
+                setIsLocationTypeMenuOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isLocationTypeMenuOpen]);
 
     useEffect(() => {
         if (!isLearnMoreModalVisible && isLearnMoreOnboardingOpen) {
@@ -946,74 +932,38 @@ function Card(props) {
     }
 };
 
-    const handleSelectLocation = () => {
+    // Edit an existing point card's coordinate(s): hide the learn-more modal and
+    // open the same "Add Points" tool used by the map's "Add card from map" toolbar.
+    const handleEditCoordinate = useCallback(() => {
         const map = window.atlasMapInstance;
         if (!map) { console.error('Map not found'); return; }
-
-        setIsSelectingLocation(true);
-        map.getCanvas().style.cursor = 'crosshair';
-
-        const onMapClick = (e) => {
-            const { lat, lng } = e.lngLat;
-            if (selectLocationMarker.current && selectLocationMarker.current.remove) {
-                selectLocationMarker.current.remove();
-            }
-
-            const popupContainer = document.createElement('div');
-            popupContainer.className = 'location-select-popup';
-            popupContainer.innerHTML = `
-                <div style="font-size:12px;margin-bottom:6px;color:#333;">
-                    ${lat.toFixed(6)}, ${lng.toFixed(6)}
-                </div>
-                <div style="display:flex;gap:6px;">
-                    <button class="location-select-confirm">OK</button>
-                    <button class="location-select-cancel">Cancel</button>
-                </div>
-            `;
-
-            const popup = new mapboxgl.Popup({
-                closeButton: false, closeOnClick: false, offset: 25,
-                className: 'location-select-mapbox-popup',
-            }).setDOMContent(popupContainer);
-
-            const marker = new mapboxgl.Marker({ color: 'red' })
-                .setLngLat([lng, lat]).setPopup(popup).addTo(map);
-            marker.togglePopup();
-            selectLocationMarker.current = marker;
-
-            popupContainer.querySelector('.location-select-confirm').addEventListener('click', () => {
-                setFormData((prev) => ({ ...prev, latitude: lat.toFixed(6), longitude: lng.toFixed(6) }));
-                marker.remove();
-                selectLocationMarker.current = null;
-                setIsSelectingLocation(false);
-                map.getCanvas().style.cursor = '';
-                map.off('click', onMapClick);
-            });
-
-            popupContainer.querySelector('.location-select-cancel').addEventListener('click', () => {
-                marker.remove();
-                selectLocationMarker.current = null;
-            });
-        };
-
-        map.on('click', onMapClick);
-        selectLocationMarker.current = { _onMapClick: onMapClick, remove: () => {} };
-    };
-
-    const cancelSelectLocation = () => {
-        const map = window.atlasMapInstance;
-        if (map) {
-            map.getCanvas().style.cursor = '';
-            if (selectLocationMarker.current) {
-                if (selectLocationMarker.current._onMapClick) {
-                    map.off('click', selectLocationMarker.current._onMapClick);
-                }
-                selectLocationMarker.current.remove();
-                selectLocationMarker.current = null;
-            }
+        setIsLocationTypeMenuOpen(false);
+        setIsEditingCoordinate(true);
+        const lat = parseFloat(formData.latitude);
+        const lng = parseFloat(formData.longitude);
+        if (!isNaN(lat) && !isNaN(lng)) {
+            map.flyTo({ center: [lng, lat], zoom: 14 });
         }
-        setIsSelectingLocation(false);
-    };
+    }, [formData.latitude, formData.longitude]);
+
+    const handleCoordinateEditSave = useCallback((points) => {
+        const first = points?.[0];
+        if (first) {
+            setFormData(prev => ({
+                ...prev,
+                latitude: Number(first.lat).toFixed(6),
+                longitude: Number(first.lng).toFixed(6),
+            }));
+        }
+        setIsEditingCoordinate(false);
+        // Ensure learn-more modal stays in edit mode
+        isEditingRef.current = true;
+        setIsLearnMoreEditMode(true);
+    }, []);
+
+    const handleCoordinateEditCancel = useCallback(() => {
+        setIsEditingCoordinate(false);
+    }, []);
 
     // Change marker card to polygon: hide modal → open PolygonDrawingModal
     const handleChangeToPolygon = useCallback(() => {
@@ -1022,10 +972,28 @@ function Card(props) {
 
         // Switch location_type but preserve existing lat/lng
         setFormData(prev => ({ ...prev, location_type: 'polygon' }));
-        setIsConvertingToPolygon(true);
+        setIsConvertingLocationType(true);
         setIsEditingPolygon(true);
 
         // Fly to the current marker location
+        const lat = parseFloat(formData.latitude);
+        const lng = parseFloat(formData.longitude);
+        if (!isNaN(lat) && !isNaN(lng)) {
+            map.flyTo({ center: [lng, lat], zoom: 14 });
+        }
+    }, [formData.latitude, formData.longitude]);
+
+    // Change marker card to image overlay: hide modal → open PolygonDrawingModal
+    // in image mode, blank (no existing overlay image), matching the map's
+    // "Add card from map" → Image tool.
+    const handleChangeToImage = useCallback(() => {
+        const map = window.atlasMapInstance;
+        if (!map) { console.error('Map not found'); return; }
+
+        setFormData(prev => ({ ...prev, location_type: 'image' }));
+        setIsConvertingLocationType(true);
+        setIsEditingPolygon(true);
+
         const lat = parseFloat(formData.latitude);
         const lng = parseFloat(formData.longitude);
         if (!isNaN(lat) && !isNaN(lng)) {
@@ -1103,20 +1071,27 @@ function Card(props) {
         });
     }, [formData.cardID, formData.location_type, props.cardID]);
 
-    // After polygon edit save: update formData and return to learn-more modal (edit mode)
-    const handlePolygonEditSave = useCallback((allRings, centroid, style, ringStyles = []) => {
-        // Flatten array-of-rings into a flat array with `ring` index property and per-ring style fields
-        const flatVerts = allRings.flatMap((ring, ringIdx) => {
-            const rs = ringStyles[ringIdx] || {};
-            return ring.map(v => ({
-                ...v,
-                ring: ringIdx,
-                fillColor: rs.fillColor,
-                fillOpacity: rs.fillOpacity,
-                lineStyle: rs.lineStyle,
-            }));
-        });
-        const primaryStyle = ringStyles[0] || style || {};
+    // After polygon/image edit save: update formData and return to learn-more modal (edit mode).
+    // PolygonDrawingModal's onSave signature differs by mode: polygon mode passes an
+    // array of rings (each an array of vertices) plus per-ring styles; image mode passes
+    // a single flat array of the 4 corner vertices plus the placed image slots (not styles).
+    const handlePolygonEditSave = useCallback((allRingsOrVerts, centroid, style, ringStylesOrSlots = []) => {
+        const isImageSave = formData.location_type === 'image';
+        const flatVerts = isImageSave
+            ? allRingsOrVerts.map(v => ({ ...v, ring: 0 }))
+            : allRingsOrVerts.flatMap((ring, ringIdx) => {
+                const rs = ringStylesOrSlots[ringIdx] || {};
+                return ring.map(v => ({
+                    ...v,
+                    ring: ringIdx,
+                    fillColor: rs.fillColor,
+                    fillOpacity: rs.fillOpacity,
+                    lineStyle: rs.lineStyle,
+                }));
+            });
+        // ringStylesOrSlots[0] holds image slot data (not a style object) in image mode,
+        // so always fall back to the shared `style` object there.
+        const primaryStyle = isImageSave ? (style || {}) : (ringStylesOrSlots[0] || style || {});
 
         // If nothing actually changed in the polygon editor, return to the
         // learn-more modal without touching formData so the "unsaved changes"
@@ -1134,7 +1109,7 @@ function Card(props) {
             fillOpacity: v.fillOpacity != null ? Number(v.fillOpacity) : cardFillOpacity,
             lineStyle: v.lineStyle || cardLineStyle,
         });
-        const polygonUnchanged = !isConvertingToPolygon &&
+        const polygonUnchanged = !isConvertingLocationType &&
             JSON.stringify((formData.polygon_vertices || []).map(normalizeVertex)) ===
             JSON.stringify(flatVerts.map(normalizeVertex));
         if (polygonUnchanged) {
@@ -1156,7 +1131,7 @@ function Card(props) {
             polygon_fill_opacity: primaryStyle.fillOpacity ?? prev.polygon_fill_opacity,
         }));
         setIsEditingPolygon(false);
-        setIsConvertingToPolygon(false);
+        setIsConvertingLocationType(false);
         // Ensure learn-more modal stays in edit mode
         isEditingRef.current = true;
         setIsLearnMoreEditMode(true);
@@ -1277,17 +1252,17 @@ function Card(props) {
                 }
             }
         }
-    }, [formData.cardID, formData.location_type, formData.polygon_fill_color, formData.polygon_fill_opacity, formData.polygon_line_style, formData.polygon_vertices, isConvertingToPolygon, getRepresentativeImageUrl, preview, props.cardID, restoreCardPolygonLayers, thumbnail]);
+    }, [formData.cardID, formData.location_type, formData.polygon_fill_color, formData.polygon_fill_opacity, formData.polygon_line_style, formData.polygon_vertices, isConvertingLocationType, getRepresentativeImageUrl, preview, props.cardID, restoreCardPolygonLayers, thumbnail]);
 
     const handlePolygonEditCancel = useCallback(() => {
-        // If was converting from marker to polygon, revert location_type
-        if (isConvertingToPolygon) {
+        // If was converting from marker to polygon/image, revert location_type
+        if (isConvertingLocationType) {
             setFormData(prev => ({ ...prev, location_type: 'point' }));
-            setIsConvertingToPolygon(false);
+            setIsConvertingLocationType(false);
         }
         setIsEditingPolygon(false);
         restoreCardPolygonLayers();
-    }, [restoreCardPolygonLayers, isConvertingToPolygon]);
+    }, [restoreCardPolygonLayers, isConvertingLocationType]);
 
     const handleLearnMoreEditStart = (e) => {
         e.stopPropagation();
@@ -1345,8 +1320,8 @@ function Card(props) {
         if (e?.stopPropagation) e.stopPropagation();
         if (isImageMutationLoading) return;
 
-        // Clean up any active location selection
-        cancelSelectLocation();
+        // Clean up any active coordinate editing
+        setIsEditingCoordinate(false);
 
         setIsImageMutationLoading(true);
         await rollbackSessionUploads();
@@ -1912,15 +1887,6 @@ function Card(props) {
                 </button>
             </div>
 
-            {/* Floating hint when selecting location from learn-more */}
-            {isSelectingLocation && ReactDOM.createPortal(
-                <div className="location-select-hint">
-                    <span>Click on the map to select a location</span>
-                    <button type="button" onClick={cancelSelectLocation}>Cancel</button>
-                </div>,
-                document.body
-            )}
-
             {/* Learn More Modal */}
             <Modal
                 isOpen={isLearnMoreModalVisible}
@@ -2354,12 +2320,39 @@ function Card(props) {
                                     </button>
                                 ) : (
                                     <div className="learn-more-location-btn-group">
-                                        <button type="button" className="learn-more-select-location-btn" onClick={handleSelectLocation}>
-                                            Select Location
+                                        <button type="button" className="learn-more-select-location-btn" onClick={handleEditCoordinate}>
+                                            Edit Coordinate
                                         </button>
-                                        <button type="button" className="learn-more-select-location-btn learn-more-change-to-polygon-btn" onClick={handleChangeToPolygon}>
-                                            Change to Polygon
-                                        </button>
+                                        <div className="learn-more-location-type-btn-wrap" ref={locationTypeMenuRef}>
+                                            <button
+                                                type="button"
+                                                className="learn-more-select-location-btn learn-more-change-to-polygon-btn"
+                                                onClick={() => setIsLocationTypeMenuOpen(v => !v)}
+                                            >
+                                                Change location type
+                                            </button>
+                                            {isLocationTypeMenuOpen && (
+                                                <div className="learn-more-location-type-menu">
+                                                    <button type="button" className="learn-more-location-type-menu-item active" disabled>
+                                                        Point
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="learn-more-location-type-menu-item"
+                                                        onClick={() => { setIsLocationTypeMenuOpen(false); handleChangeToPolygon(); }}
+                                                    >
+                                                        Polygon
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="learn-more-location-type-menu-item"
+                                                        onClick={() => { setIsLocationTypeMenuOpen(false); handleChangeToImage(); }}
+                                                    >
+                                                        Image
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -2514,16 +2507,6 @@ function Card(props) {
 
                                     return (
                                         <li key={item.id} className="learn-more-arcgis-link-item">
-                                            <button
-                                                type="button"
-                                                className={`learn-more-arcgis-pin-btn${isPinnedItem ? ' pinned' : ''}`}
-                                                title={isPinnedItem
-                                                    ? 'Unpin — layer no longer stays open automatically'
-                                                    : 'Pin — keep this layer always open'}
-                                                onClick={() => handleToggleArcgisPin(item)}
-                                            >
-                                                <FontAwesomeIcon icon={faThumbtack} />
-                                            </button>
                                             <label
                                                 className="learn-more-arcgis-layer-toggle-label"
                                                 title={isPinnedItem
@@ -3145,19 +3128,30 @@ function Card(props) {
                 document.body
             )}
 
-            {/* Polygon Editing Modal (from learn-more edit) */}
+            {/* Polygon/Image Editing Modal (from learn-more edit) */}
             {/* Wrap in a click-stopper so portal events don't bubble to the card's onClick */}
             <div onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
             {isEditingPolygon && (
                 <PolygonDrawingModal
                     mode={isImageCard ? 'image' : 'polygon'}
-                    title={isImageCard ? 'Edit Image' : 'Draw Polygon'}
-                    initialVertices={isConvertingToPolygon ? [] : formData.polygon_vertices}
-                    initialLineStyle={isConvertingToPolygon ? undefined : formData.polygon_line_style}
-                    initialFillColor={isConvertingToPolygon ? undefined : formData.polygon_fill_color}
-                    initialImageUrl={isImageCard ? getRepresentativeImageUrl() : undefined}
+                    title={isImageCard ? (isConvertingLocationType ? 'Place Image' : 'Edit Image') : 'Draw Polygon'}
+                    initialVertices={isConvertingLocationType ? [] : formData.polygon_vertices}
+                    initialLineStyle={isConvertingLocationType ? undefined : formData.polygon_line_style}
+                    initialFillColor={isConvertingLocationType ? undefined : formData.polygon_fill_color}
+                    initialImageUrl={(isImageCard && !isConvertingLocationType) ? getRepresentativeImageUrl() : undefined}
                     onSave={handlePolygonEditSave}
                     onCancel={handlePolygonEditCancel}
+                />
+            )}
+            {isEditingCoordinate && (
+                <CoordinatesPanel
+                    initialPoints={(() => {
+                        const lat = parseFloat(formData.latitude);
+                        const lng = parseFloat(formData.longitude);
+                        return (!isNaN(lat) && !isNaN(lng)) ? [{ lat, lng }] : [];
+                    })()}
+                    onSave={handleCoordinateEditSave}
+                    onCancel={handleCoordinateEditCancel}
                 />
             )}
             </div>
