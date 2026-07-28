@@ -9,10 +9,12 @@
 // Both components must stay mounted while the panel is mounted (they return
 // null when closed) so their per-service/per-layer UI state persists across
 // open/close, matching the panels' previous behavior.
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faFloppyDisk, faSquare, faDownload, faCircleCheck } from '@fortawesome/free-solid-svg-icons';
+import { faFloppyDisk, faSquare, faDownload, faCircleCheck, faCaretDown } from '@fortawesome/free-solid-svg-icons';
+import shpwrite from '@mapbox/shp-write';
+import tokml from 'tokml';
 import { getArcgisTileUrl } from './arcgisDataUtils';
 import { applyArcgisVectorLayerFilter } from './arcgisVectorUtils';
 
@@ -190,6 +192,33 @@ const SAVE_BTN_STYLE = {
     alignItems: 'center',
     gap: '4px',
     whiteSpace: 'nowrap',
+};
+
+// Positioned as position:fixed via inline top/left computed from the trigger
+// button's bounding rect, and rendered through a portal to document.body —
+// keeps it fully outside the Layer Info modal's DOM/layout so opening it
+// can never resize or push around the modal's own content.
+const DOWNLOAD_MENU_STYLE = {
+    zIndex: 20,
+    background: '#fff',
+    border: '1px solid #ddd',
+    borderRadius: '4px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+    minWidth: '150px',
+    overflow: 'hidden',
+};
+
+const DOWNLOAD_MENU_ITEM_STYLE = {
+    display: 'block',
+    width: '100%',
+    padding: '8px 12px',
+    background: 'none',
+    border: 'none',
+    borderBottom: '1px solid #eee',
+    textAlign: 'left',
+    cursor: 'pointer',
+    fontSize: '13px',
+    color: '#333',
 };
 
 // Centered confirmation modal shown after a successful save (auto-dismisses).
@@ -702,12 +731,47 @@ export function LayerInfoModal({
     const [zoomRangeByKey, setZoomRangeByKey] = usePersistentState(onboardingPrefix, 'layerZoomRangeByKey', {});
     const [layerFilter, setLayerFilter] = useState(null);
     const [saveSuccessMsg, setSaveSuccessMsg] = useState(null);
+    const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false);
+    const [downloadMenuPos, setDownloadMenuPos] = useState(null); // { top, left } in viewport coords
+    const downloadBtnRef = useRef(null);
+    const downloadMenuPopupRef = useRef(null);
 
-    // Reset the filter inputs whenever the target layer changes / modal closes
+    const toggleDownloadMenu = () => {
+        setIsDownloadMenuOpen(open => {
+            if (!open && downloadBtnRef.current) {
+                const rect = downloadBtnRef.current.getBoundingClientRect();
+                setDownloadMenuPos({ top: rect.bottom + 4, left: rect.left });
+            }
+            return !open;
+        });
+    };
+
+    // Reset the filter inputs and download menu whenever the target layer changes / modal closes
     const filterResetKey = layerInfo ? `${layerInfo.serviceKey}-${layerInfo.layerId}` : null;
     useEffect(() => {
         setLayerFilter(null);
+        setIsDownloadMenuOpen(false);
     }, [filterResetKey]);
+
+    // Close on outside click, and on scroll/resize so the portal-rendered menu
+    // (positioned via a one-time bounding-rect snapshot) never drifts away from the button.
+    useEffect(() => {
+        if (!isDownloadMenuOpen) return;
+        const handleClickOutside = (e) => {
+            if (downloadBtnRef.current && downloadBtnRef.current.contains(e.target)) return;
+            if (downloadMenuPopupRef.current && downloadMenuPopupRef.current.contains(e.target)) return;
+            setIsDownloadMenuOpen(false);
+        };
+        const closeMenu = () => setIsDownloadMenuOpen(false);
+        document.addEventListener('mousedown', handleClickOutside);
+        window.addEventListener('scroll', closeMenu, true);
+        window.addEventListener('resize', closeMenu);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            window.removeEventListener('scroll', closeMenu, true);
+            window.removeEventListener('resize', closeMenu);
+        };
+    }, [isDownloadMenuOpen]);
 
     if (!layerInfo) return null;
 
@@ -755,6 +819,79 @@ export function LayerInfoModal({
         } catch (err) {
             console.warn('[ArcgisInfoModals] Layer image download failed, opening in new tab:', err);
             window.open(exportUrl, '_blank', 'noopener');
+        }
+    };
+
+    const safeLayerFileName = () => (layerInfo.layerName || 'layer').replace(/[\\/:*?"<>|]+/g, '_');
+
+    const downloadBlob = (blob, filename) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    };
+
+    // Query the full layer's features as GeoJSON (not just the current map view).
+    // Note: subject to the service's maxRecordCount — very large layers may come back truncated.
+    const fetchLayerGeoJSON = async () => {
+        const params = new URLSearchParams({
+            where: '1=1',
+            outFields: '*',
+            outSR: '4326',
+            f: 'geojson',
+        });
+        const queryUrl = `${layerInfo.serviceUrl}/${layerInfo.layerId}/query?${params.toString()}`;
+        const res = await fetch(queryUrl);
+        if (!res.ok) throw new Error(`Query request failed: ${res.status}`);
+        const geojson = await res.json();
+        if (!geojson || geojson.type !== 'FeatureCollection') {
+            throw new Error(geojson?.error?.message || 'This layer does not support feature export');
+        }
+        return geojson;
+    };
+
+    const handleDownloadGeoJSON = async () => {
+        setIsDownloadMenuOpen(false);
+        try {
+            const geojson = await fetchLayerGeoJSON();
+            downloadBlob(
+                new Blob([JSON.stringify(geojson)], { type: 'application/geo+json' }),
+                `${safeLayerFileName()}.geojson`
+            );
+        } catch (err) {
+            console.warn('[ArcgisInfoModals] GeoJSON download failed:', err);
+            showMessage?.(`GeoJSON download failed: ${err.message}`);
+        }
+    };
+
+    const handleDownloadShapefile = async () => {
+        setIsDownloadMenuOpen(false);
+        try {
+            const geojson = await fetchLayerGeoJSON();
+            const blob = await shpwrite.zip(geojson, { outputType: 'blob', filename: safeLayerFileName() });
+            downloadBlob(blob, `${safeLayerFileName()}.zip`);
+        } catch (err) {
+            console.warn('[ArcgisInfoModals] Shapefile download failed:', err);
+            showMessage?.(`Shapefile download failed: ${err.message}`);
+        }
+    };
+
+    const handleDownloadKML = async () => {
+        setIsDownloadMenuOpen(false);
+        try {
+            const geojson = await fetchLayerGeoJSON();
+            const kml = tokml(geojson, { documentName: layerInfo.layerName || 'layer' });
+            downloadBlob(
+                new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' }),
+                `${safeLayerFileName()}.kml`
+            );
+        } catch (err) {
+            console.warn('[ArcgisInfoModals] KML download failed:', err);
+            showMessage?.(`KML download failed: ${err.message}`);
         }
     };
 
@@ -1201,16 +1338,46 @@ export function LayerInfoModal({
                                         Save Layer
                                     </button>
                                     {/MapServer|ImageServer/i.test(layerInfo.serviceUrl || '') && (
-                                        <button
-                                            type="button"
-                                            className="arcgis-service-info-save-btn"
-                                            onClick={handleDownloadLayerImage}
-                                            title="Download this layer's raster image for the current map view"
-                                            style={{ ...SAVE_BTN_STYLE, backgroundColor: '#2e7d32' }}
-                                        >
-                                            <FontAwesomeIcon icon={faDownload} style={{ fontSize: '12px' }} />
-                                            Download Image
-                                        </button>
+                                        <>
+                                            <button
+                                                type="button"
+                                                ref={downloadBtnRef}
+                                                className="arcgis-service-info-save-btn"
+                                                onClick={toggleDownloadMenu}
+                                                title="Download this layer"
+                                                style={{ ...SAVE_BTN_STYLE, backgroundColor: '#2e7d32' }}
+                                            >
+                                                <FontAwesomeIcon icon={faDownload} style={{ fontSize: '12px' }} />
+                                                Download
+                                                <FontAwesomeIcon icon={faCaretDown} style={{ fontSize: '10px' }} />
+                                            </button>
+                                            {isDownloadMenuOpen && downloadMenuPos && createPortal(
+                                                <div
+                                                    ref={downloadMenuPopupRef}
+                                                    style={{ ...DOWNLOAD_MENU_STYLE, position: 'fixed', top: downloadMenuPos.top, left: downloadMenuPos.left }}
+                                                >
+                                                    <button
+                                                        type="button"
+                                                        style={DOWNLOAD_MENU_ITEM_STYLE}
+                                                        onClick={() => { setIsDownloadMenuOpen(false); handleDownloadLayerImage(); }}
+                                                    >
+                                                        Image (PNG)
+                                                    </button>
+                                                    {layerData.geometryType && (<>
+                                                        <button type="button" style={DOWNLOAD_MENU_ITEM_STYLE} onClick={handleDownloadGeoJSON}>
+                                                            GeoJSON
+                                                        </button>
+                                                        <button type="button" style={DOWNLOAD_MENU_ITEM_STYLE} onClick={handleDownloadShapefile}>
+                                                            Shapefile
+                                                        </button>
+                                                        <button type="button" style={{ ...DOWNLOAD_MENU_ITEM_STYLE, borderBottom: 'none' }} onClick={handleDownloadKML}>
+                                                            KML
+                                                        </button>
+                                                    </>)}
+                                                </div>,
+                                                document.body
+                                            )}
+                                        </>
                                     )}
                                 </div>
                                 <a
