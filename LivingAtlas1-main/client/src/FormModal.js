@@ -90,12 +90,52 @@ const FormModal = (props) => {
         return () => window.removeEventListener('map-add-tools-cancel-placement', handler);
     });
 
+    // Clear all card-creation input so the next time this (always-mounted) modal
+    // opens it doesn't show data left over from the last card — e.g. points placed
+    // via the Add Points tool, a drawn polygon, or typed-in fields.
+    const resetFormState = () => {
+        setLocationType('point');
+        setMultiPoints([]);
+        setPolygonVertices([]);
+        setPolygonFillColor('#0077c0');
+        setPolygonLineStyle('solid');
+        setFormData({
+            username: props.username || '',
+            name: '',
+            email: props.email || '',
+            title: '',
+            category: '',
+            description: '',
+            funding: '',
+            org: '',
+            link: '',
+            tags: '',
+            latitude: '',
+            longitude: '',
+            is_public: true,
+        });
+        setLinks([{ url: '', text: '' }]);
+        setSelectedFiles([]);
+        setImageFiles([]);
+        setImagePreviews(prev => {
+            prev.forEach(url => URL.revokeObjectURL(url));
+            return [];
+        });
+        setOverlayImageFile(null);
+        setOverlayImagePreview('');
+        setOverlayImageSlots([]);
+        setOverlayImageOpacity(0.85);
+        setPendingArcgisItems([]);
+        setPendingCustomLayerItems([]);
+    };
+
     const handleCloseModal = () => {
         setModalIsOpen(false);
         setIsDrawingPolygon(false);
         setIsPlacingImageOverlay(false);
         setIsPlacingMultipoint(false);
         setIsCreateCardOnboardingOpen(false);
+        resetFormState();
         if (props.onRequestClose) {
             props.onRequestClose();
         }
