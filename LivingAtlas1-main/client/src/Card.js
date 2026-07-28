@@ -840,6 +840,20 @@ function Card(props) {
                 lineStyle: formData.polygon_line_style
             }));
         }
+    } else if (formData.location_type === 'multipoint' && Array.isArray(formData.polygon_vertices) && formData.polygon_vertices.length > 0) {
+        // Multi-point cards store their per-point icon/color/opacity in CardPolygonVertices too.
+        // The backend clears and re-inserts that table on every update, so every save must
+        // resend the current points here — otherwise a save (e.g. right after linking a custom
+        // layer) silently wipes the points and their icons.
+        formDataToSend.append('multipoint_coordinates', JSON.stringify(
+            formData.polygon_vertices.map(v => ({
+                lat: v.lat,
+                lng: v.lng,
+                icon: v.icon,
+                color: v.markerColor,
+                opacity: v.markerOpacity,
+            }))
+        ));
     }
 
     //Only true if editing an existing card
