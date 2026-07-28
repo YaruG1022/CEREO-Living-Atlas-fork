@@ -6,6 +6,7 @@ import api from './api.js';
 import PolygonDrawingModal from './PolygonDrawingModal';
 import CoordinatesPanel from './CoordinatesPanel';
 import ArcGISPickerModal from './ArcGISPickerModal';
+import CustomLayerPickerModal from './CustomLayerPickerModal';
 import CreateCardModalOnboarding from './OnboardingCreateCardModal';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faQuestion, faPlay } from '@fortawesome/free-solid-svg-icons';
@@ -143,6 +144,8 @@ const FormModal = (props) => {
     const [overlayImageOpacity, setOverlayImageOpacity] = useState(0.85);
     const [pendingArcgisItems, setPendingArcgisItems] = useState([]);
     const [isArcgisPickerOpen, setIsArcgisPickerOpen] = useState(false);
+    const [pendingCustomLayerItems, setPendingCustomLayerItems] = useState([]);
+    const [isCustomLayerPickerOpen, setIsCustomLayerPickerOpen] = useState(false);
     const imageInputRef = useRef(null);
     const fileInputRef = useRef(null);
 
@@ -370,6 +373,24 @@ const FormModal = (props) => {
                         });
                     } catch (linkErr) {
                         console.error('Failed to link ArcGIS item:', linkErr);
+                    }
+                }
+            }
+            if (newCardId && pendingCustomLayerItems.length > 0) {
+                for (const item of pendingCustomLayerItems) {
+                    try {
+                        await api.post('/cardArcGISLinks', {
+                            card_id: newCardId,
+                            service_key: item.service_key,
+                            layer_id: null,
+                            sublayer_index: null,
+                            display_name: item.display_name,
+                            item_type: item.item_type,
+                            state_code: '',
+                            folder_name: item.folder_name,
+                        });
+                    } catch (linkErr) {
+                        console.error('Failed to link custom layer:', linkErr);
                     }
                 }
             }
@@ -807,6 +828,28 @@ const FormModal = (props) => {
                         </div>
                     )}
 
+                    <label style={{ marginTop: '10px' }}>Linked Custom Layers (optional):</label>
+                    <button
+                        type="button"
+                        className="location_button"
+                        onClick={() => setIsCustomLayerPickerOpen(true)}
+                    >
+                        + Link Custom Layer
+                    </button>
+                    {pendingCustomLayerItems.length > 0 && (
+                        <div className="form-modal-file-list" style={{marginTop:'6px'}}>
+                            {pendingCustomLayerItems.map((item, i) => (
+                                <div key={i} className="form-modal-file-item">
+                                    <span>{item.display_name}</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => setPendingCustomLayerItems(prev => prev.filter((_, j) => j !== i))}
+                                    >&times;</button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
                     <div style={{ display: "flex", justifyContent: "space-between", marginTop: "1rem" }} data-onboarding-target="create-card-submit-actions">
                         <button type="submit">Submit</button>
                         <button type="button" className="cancel_button" onClick={handleCloseModal}>Cancel</button>
@@ -831,6 +874,20 @@ const FormModal = (props) => {
                         setIsArcgisPickerOpen(false);
                     }}
                     onClose={() => setIsArcgisPickerOpen(false)}
+                />,
+                document.body
+            )}
+            {isCustomLayerPickerOpen && ReactDOM.createPortal(
+                <CustomLayerPickerModal
+                    onAdd={(items) => {
+                        setPendingCustomLayerItems(prev => {
+                            const existingKeys = new Set(prev.map(i => i.service_key));
+                            const newItems = items.filter(i => !existingKeys.has(i.service_key));
+                            return [...prev, ...newItems];
+                        });
+                        setIsCustomLayerPickerOpen(false);
+                    }}
+                    onClose={() => setIsCustomLayerPickerOpen(false)}
                 />,
                 document.body
             )}

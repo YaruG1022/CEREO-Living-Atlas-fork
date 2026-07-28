@@ -12,6 +12,7 @@ import { faHeart as regularHeart, faQuestionCircle, faCirclePlay } from '@fortaw
 import { fetchUserPreferences, saveUserPreferences } from './userPreferencesApi';
 import PolygonDrawingModal from './PolygonDrawingModal';
 import ArcGISPickerModal from './ArcGISPickerModal';
+import CustomLayerPickerModal from './CustomLayerPickerModal';
 import LearnMoreOnboarding, { LEARN_MORE_EDIT_MODE_STEP } from './OnboardingLearnMore';
 import WA_ARCGIS_SERVICES from './arcgis_services_wa.json';
 import ID_ARCGIS_SERVICES from './arcgis_services_id.json';
@@ -113,6 +114,10 @@ function Card(props) {
     const pinnedAutoOpenedRef = useRef(false);
     const linkedItemsLoadedRef = useRef(null); // tracks which cardID was last loaded
     const linkedArcgisItemsBackupRef = useRef(null); // backup of linkedArcgisItems when edit mode starts
+    const [linkedCustomLayerItems, setLinkedCustomLayerItems] = useState([]);
+    const [linkedCustomLayerChecked, setLinkedCustomLayerChecked] = useState({});
+    const [isCustomLayerPickerOpen, setIsCustomLayerPickerOpen] = useState(false);
+    const linkedCustomLayerItemsBackupRef = useRef(null);
     const [learnMoreLinks, setLearnMoreLinks] = useState([{ url: '', text: '' }]);
     const [editFormLinks, setEditFormLinks] = useState([{ url: '', text: '' }]);
     const [thumbnail, setThumbnail] = useState(null);
@@ -155,6 +160,25 @@ function Card(props) {
         setIsFavorited(props.isFavorited);
     }, [props.isFavorited]);
 
+    // Split fetched card links into ArcGIS vs custom-layer items, and restore
+    // custom-layer visibility from the DB-persisted is_visible flag so it
+    // survives modal close/reopen and page reloads instead of resetting.
+    const applyFetchedCardLinks = useCallback((all) => {
+        setLinkedArcgisItems(all.filter(i => i.item_type !== 'uploaded_custom'));
+        const customItems = all.filter(i => i.item_type === 'uploaded_custom');
+        setLinkedCustomLayerItems(customItems);
+        const checkedMap = {};
+        customItems.forEach(item => {
+            if (item.is_visible) {
+                checkedMap[item.id] = true;
+                window.dispatchEvent(new CustomEvent('custom-layer-toggle', {
+                    detail: { serviceKey: item.service_key, checked: true },
+                }));
+            }
+        });
+        setLinkedCustomLayerChecked(checkedMap);
+    }, []);
+
     useEffect(() => {
         if (props.forceOpenLearnMoreSignal) {
             setIsModalOpen(true);
@@ -164,7 +188,7 @@ function Card(props) {
                 if (linkedItemsLoadedRef.current !== cardId) {
                     linkedItemsLoadedRef.current = cardId;
                     api.get(`/cardArcGISLinks?card_id=${cardId}`)
-                        .then(res => setLinkedArcgisItems(res.data.data || []))
+                        .then(res => applyFetchedCardLinks(res.data.data || []))
                         .catch(() => {});
                 }
             }
@@ -225,6 +249,15 @@ function Card(props) {
         });
     }, [isModalOpen, linkedArcgisItems, pinnedArcgisItems]);
 
+    const handleToggleCustomLayer = (item, nowChecked) => {
+        window.dispatchEvent(new CustomEvent('custom-layer-toggle', {
+            detail: { serviceKey: item.service_key, checked: nowChecked },
+        }));
+        // Persist to DB so the shown/hidden state survives modal close/reopen and reloads.
+        api.patch(`/cardArcGISLinks/${item.id}`, { is_visible: nowChecked })
+            .catch(err => console.warn('Failed to save custom layer visibility:', err));
+    };
+
     const handleToggleArcgisPin = (item) => {
         const email = localStorage.getItem('email') || '';
         if (!props.isLoggedIn || !email) {
@@ -280,7 +313,7 @@ function Card(props) {
             if (linkedItemsLoadedRef.current !== cardId) {
                 linkedItemsLoadedRef.current = cardId;
                 api.get(`/cardArcGISLinks?card_id=${cardId}`)
-                    .then(res => setLinkedArcgisItems(res.data.data || []))
+                    .then(res => applyFetchedCardLinks(res.data.data || []))
                     .catch(() => {});
             }
         }
@@ -1253,6 +1286,7 @@ function Card(props) {
         setLearnMoreBackup({ ...formData });
         setLearnMoreLinks(parseLinks(formData.link, formData.link_text));
         linkedArcgisItemsBackupRef.current = linkedArcgisItems.map(i => ({ ...i }));
+        linkedCustomLayerItemsBackupRef.current = linkedCustomLayerItems.map(i => ({ ...i }));
         setSessionUploadedImageIDs([]);
         setSelectedAllImageIDs([]);
         setPendingDeletedImageIDs([]);
@@ -1302,6 +1336,10 @@ function Card(props) {
         if (linkedArcgisItemsBackupRef.current !== null) {
             setLinkedArcgisItems(linkedArcgisItemsBackupRef.current);
             linkedArcgisItemsBackupRef.current = null;
+        }
+        if (linkedCustomLayerItemsBackupRef.current !== null) {
+            setLinkedCustomLayerItems(linkedCustomLayerItemsBackupRef.current);
+            linkedCustomLayerItemsBackupRef.current = null;
         }
 
         isEditingRef.current = false;
@@ -1412,8 +1450,16 @@ function Card(props) {
             if (currentIds !== backupIds) return true;
         }
 
+        // Compare linked custom layer items
+        const customBackup = linkedCustomLayerItemsBackupRef.current;
+        if (customBackup !== null) {
+            const currentIds = linkedCustomLayerItems.map(i => i.id).sort().join(',');
+            const backupIds = customBackup.map(i => i.id).sort().join(',');
+            if (currentIds !== backupIds) return true;
+        }
+
         return false;
-    }, [isLearnMoreEditMode, learnMoreBackup, formData, linkedArcgisItems, learnMoreLinks]);
+    }, [isLearnMoreEditMode, learnMoreBackup, formData, linkedArcgisItems, linkedCustomLayerItems, learnMoreLinks]);
 
     const handleLearnMoreClose = async (e) => {
         if (e?.stopPropagation) e.stopPropagation();
@@ -2573,6 +2619,106 @@ function Card(props) {
                                 setIsArcgisPickerOpen(false);
                             }}
                             onClose={() => setIsArcgisPickerOpen(false)}
+                        />
+                    )}
+
+                    {/* Linked Custom Layers Section */}
+                    {(isLearnMoreEditMode || linkedCustomLayerItems.length > 0) && (
+                    <div className="learn-more-arcgis-links-section">
+                        <p><strong>Linked Custom Layers:</strong></p>
+                        {linkedCustomLayerItems.length === 0 ? (
+                            <p className="learn-more-no-arcgis-links">No linked custom layers.</p>
+                        ) : (
+                            <ul className="learn-more-arcgis-links-list">
+                                {linkedCustomLayerItems.map(item => {
+                                    const isChecked = !!linkedCustomLayerChecked[item.id];
+                                    return (
+                                        <li key={item.id} className="learn-more-arcgis-link-item">
+                                            <label
+                                                className="learn-more-arcgis-layer-toggle-label"
+                                                title="Show/hide this layer on the map"
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    className="learn-more-arcgis-layer-toggle-cb"
+                                                    checked={isChecked}
+                                                    onChange={() => {
+                                                        const nowChecked = !isChecked;
+                                                        setLinkedCustomLayerChecked(prev => ({ ...prev, [item.id]: nowChecked }));
+                                                        handleToggleCustomLayer(item, nowChecked);
+                                                    }}
+                                                />
+                                            </label>
+                                            <span className="learn-more-arcgis-link-row">
+                                                <span className="learn-more-arcgis-row-text">Custom</span>
+                                                <span className="learn-more-arcgis-row-sep"> › </span>
+                                                <span className="learn-more-arcgis-row-text">{item.folder_name || 'Root'}</span>
+                                                <span className="learn-more-arcgis-row-sep"> › </span>
+                                                <span className="learn-more-arcgis-row-text learn-more-arcgis-row-name">{item.display_name}</span>
+                                            </span>
+                                            <button
+                                                type="button"
+                                                className="learn-more-arcgis-goto-btn"
+                                                onClick={() => window.dispatchEvent(new CustomEvent('open-custom-layers-panel'))}
+                                                title="Open Custom Layers Panel"
+                                            >
+                                                ›
+                                            </button>
+                                            {isLearnMoreEditMode && (
+                                                <button
+                                                    type="button"
+                                                    className="learn-more-arcgis-link-delete-btn"
+                                                    title="Remove link"
+                                                    onClick={async () => {
+                                                        try {
+                                                            await api.delete(`/cardArcGISLinks/${item.id}`);
+                                                            setLinkedCustomLayerItems(prev => prev.filter(i => i.id !== item.id));
+                                                        } catch (err) {
+                                                            console.error('Failed to remove custom layer link:', err);
+                                                        }
+                                                    }}
+                                                >
+                                                    ×
+                                                </button>
+                                            )}
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        )}
+                        {isLearnMoreEditMode && (
+                            <button
+                                type="button"
+                                className="learn-more-add-arcgis-btn"
+                                onClick={() => setIsCustomLayerPickerOpen(true)}
+                            >
+                                + Add Custom Layer
+                            </button>
+                        )}
+                    </div>
+                    )}
+
+                    {/* Custom Layer Picker Modal */}
+                    {isCustomLayerPickerOpen && (
+                        <CustomLayerPickerModal
+                            onAdd={async (links) => {
+                                const cardId = formData.cardID;
+                                if (!cardId) return;
+                                const newItems = [];
+                                for (const link of links) {
+                                    try {
+                                        const res = await api.post('/cardArcGISLinks', { card_id: cardId, ...link });
+                                        newItems.push({ id: res.data.id, card_id: cardId, ...link });
+                                    } catch (err) {
+                                        console.error('Failed to add custom layer link:', err);
+                                    }
+                                }
+                                if (newItems.length > 0) {
+                                    setLinkedCustomLayerItems(prev => [...prev, ...newItems]);
+                                }
+                                setIsCustomLayerPickerOpen(false);
+                            }}
+                            onClose={() => setIsCustomLayerPickerOpen(false)}
                         />
                     )}
                     </div>

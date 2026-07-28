@@ -640,6 +640,18 @@ function CustomLayersPanel({
         // eslint-disable-next-line
     }, [checkedLayerIds, serviceLayers, checkedSublayerIds]);
 
+    // Listen for external toggle requests from the learn-more modal card view
+    useEffect(() => {
+        const handler = (e) => {
+            const { serviceKey, checked } = e.detail || {};
+            if (!serviceKey) return;
+            setCheckedLayerIds(prev => ({ ...prev, [serviceKey]: checked ? [0] : [] }));
+            setServiceLayerAdded(prev => ({ ...prev, [serviceKey]: !!checked }));
+        };
+        window.addEventListener('custom-layer-toggle', handler);
+        return () => window.removeEventListener('custom-layer-toggle', handler);
+    }, []);
+
     // Clear all layers from map:
     const handleClearAllLayers = () => {
         setCheckedLayerIds({});

@@ -21,6 +21,7 @@ def _ensure_table():
                 folder_name TEXT NOT NULL
             )
         """)
+        c.execute("ALTER TABLE CardArcGISLinks ADD COLUMN IF NOT EXISTS is_visible BOOLEAN NOT NULL DEFAULT FALSE")
         conn.commit()
 
 
@@ -47,14 +48,14 @@ def get_card_arcgis_links(card_id: int = Query(...)):
         with conn.cursor() as c:
             c.execute("""
                 SELECT id, card_id, service_key, layer_id, sublayer_index,
-                       display_name, item_type, state_code, folder_name
+                       display_name, item_type, state_code, folder_name, is_visible
                 FROM CardArcGISLinks
                 WHERE card_id = %s
                 ORDER BY id ASC
             """, (card_id,))
             rows = c.fetchall()
         columns = ["id", "card_id", "service_key", "layer_id", "sublayer_index",
-                   "display_name", "item_type", "state_code", "folder_name"]
+                   "display_name", "item_type", "state_code", "folder_name", "is_visible"]
         return {"data": [dict(zip(columns, row)) for row in rows]}
     except Exception as e:
         print(f"[CardArcGISLinks] GET error: {e}")
@@ -78,6 +79,25 @@ def create_card_arcgis_link(link: LinkCreate):
         return {"id": new_id}
     except Exception as e:
         print(f"[CardArcGISLinks] POST error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+class LinkVisibilityUpdate(BaseModel):
+    is_visible: bool
+
+
+@card_arcgis_links_router.patch("/cardArcGISLinks/{link_id}")
+def update_card_arcgis_link_visibility(link_id: int, update: LinkVisibilityUpdate):
+    try:
+        with conn.cursor() as c:
+            c.execute(
+                "UPDATE CardArcGISLinks SET is_visible = %s WHERE id = %s",
+                (update.is_visible, link_id),
+            )
+            conn.commit()
+        return {"success": True}
+    except Exception as e:
+        print(f"[CardArcGISLinks] PATCH error: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
