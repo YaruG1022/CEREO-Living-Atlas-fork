@@ -521,3 +521,18 @@ export async function renameCustomFolder(userEmail, oldName, newName) {
     });
     return response.data;
 }
+
+// --- Card-linked custom layer visibility ---
+
+// Service keys of uploaded custom layers marked visible on any card (is_visible = true
+// in CardArcGISLinks), so they can auto-restore on the map without needing a card's
+// learn-more modal to be opened first.
+export async function fetchVisibleCustomLayerServiceKeys() {
+    try {
+        const response = await api.get('/cardArcGISLinks/visible-custom-layers');
+        return Array.isArray(response.data?.service_keys) ? response.data.service_keys : [];
+    } catch (error) {
+        console.warn('[arcgisServicesDb] Failed to fetch visible custom layer service keys:', error?.message || error);
+        return [];
+    }
+}

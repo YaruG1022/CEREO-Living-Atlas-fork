@@ -82,6 +82,25 @@ def create_card_arcgis_link(link: LinkCreate):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+@card_arcgis_links_router.get("/cardArcGISLinks/visible-custom-layers")
+def get_visible_custom_layer_service_keys():
+    """Service keys of uploaded custom layers marked visible on any card, so the
+    Custom Layers Panel can auto-restore them on load without needing a card's
+    learn-more modal to be opened first."""
+    try:
+        with conn.cursor() as c:
+            c.execute("""
+                SELECT DISTINCT service_key
+                FROM CardArcGISLinks
+                WHERE item_type = 'uploaded_custom' AND is_visible = TRUE
+            """)
+            rows = c.fetchall()
+        return {"service_keys": [row[0] for row in rows]}
+    except Exception as e:
+        print(f"[CardArcGISLinks] GET visible-custom-layers error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
 class LinkVisibilityUpdate(BaseModel):
     is_visible: bool
 

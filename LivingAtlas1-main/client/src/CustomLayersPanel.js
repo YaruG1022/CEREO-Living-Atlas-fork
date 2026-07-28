@@ -9,7 +9,7 @@ import {
     fetchArcgisServiceInfo,
     fetchArcgisLayerInfo,
 } from './arcgisDataUtils';
-import { fetchCustomLayers, deleteCustomLayer, reorderCustomLayers, saveLayerOrder, fetchCustomFolders, createCustomFolder, deleteCustomFolder, renameCustomFolder, saveCustomLayer } from './arcgisServicesDb';
+import { fetchCustomLayers, deleteCustomLayer, reorderCustomLayers, saveLayerOrder, fetchCustomFolders, createCustomFolder, deleteCustomFolder, renameCustomFolder, saveCustomLayer, fetchVisibleCustomLayerServiceKeys } from './arcgisServicesDb';
 import { buildLayerTree, getAllLeafLayers, getDescendantLeafLayers, LayerTreeNode } from './LayerTree';
 import { filterUploadPanelData } from './arcgisUploadSearchUtils';
 import { buildMatchList, useSearchNav } from './arcgisSearchNavUtils';
@@ -130,18 +130,22 @@ function CustomLayersPanel({
         statusTimer.current = setTimeout(() => setStatusMsg(null), 3000);
     };
 
-    // Load custom layers + folders from backend — once per user+refreshKey, not on every panel open/close
+    // Load custom layers + folders from backend — once per user+refreshKey. Not gated on
+    // isOpen: the panel is mounted for the lifetime of the app (see Home.js), and layers
+    // linked to cards as "visible" need to render on the map on page load even if the
+    // user never opens this panel or any card's learn-more modal.
     useEffect(() => {
-        if (!isOpen || !userEmail) return;
+        if (!userEmail) return;
         const loadKey = `${userEmail}:${refreshKey}`;
         if (loadedKeyRef.current === loadKey) return; // already loaded for this user/version
         setIsLoading(true);
         let active = true;
         (async () => {
             try {
-                const [layers, folders] = await Promise.all([
+                const [layers, folders, visibleKeys] = await Promise.all([
                     fetchCustomLayers(userEmail),
                     fetchCustomFolders(userEmail),
+                    fetchVisibleCustomLayerServiceKeys(),
                 ]);
                 if (active) {
                     const uploadedMeta = getUploadedLayersMeta();
@@ -155,14 +159,25 @@ function CustomLayersPanel({
                         state: '',
                     }));
                     const uploadedLayerStates = {};
+                    const visibleKeySet = new Set(visibleKeys);
+                    const autoCheckedLayerIds = {};
+                    const autoServiceLayerAdded = {};
                     uploadedMeta.forEach(m => {
                         uploadedLayerStates[m.key] = [{ id: 0, name: m.label, type: 'Feature Layer' }];
+                        if (visibleKeySet.has(m.key)) {
+                            autoCheckedLayerIds[m.key] = [0];
+                            autoServiceLayerAdded[m.key] = true;
+                        }
                     });
                     unstable_batchedUpdates(() => {
                         setCustomServices([...layers, ...uploadedServices]);
                         setDbFolders(folders);
                         if (Object.keys(uploadedLayerStates).length > 0) {
                             setServiceLayers(prev => ({ ...prev, ...uploadedLayerStates }));
+                        }
+                        if (Object.keys(autoCheckedLayerIds).length > 0) {
+                            setCheckedLayerIds(prev => ({ ...prev, ...autoCheckedLayerIds }));
+                            setServiceLayerAdded(prev => ({ ...prev, ...autoServiceLayerAdded }));
                         }
                         setIsLoading(false);
                     });
@@ -174,7 +189,7 @@ function CustomLayersPanel({
             }
         })();
         return () => { active = false; };
-    }, [isOpen, userEmail, refreshKey]);
+    }, [userEmail, refreshKey]);
 
     // Group services by folder (preserving sort_order from DB)
     const servicesByFolder = {};
