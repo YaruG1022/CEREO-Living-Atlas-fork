@@ -739,6 +739,9 @@ class SaveCustomLayerRequest(BaseModel):
     folder: str = 'Root'
     type: str = 'MapServer'
     state: str = ''
+    # Serialized GeoJSON FeatureCollection — only set for uploaded file layers
+    # (type = 'uploaded'); NULL for ArcGIS service layers.
+    geojson: Optional[str] = None
 
 class DeleteCustomLayerRequest(BaseModel):
     user_email: str
@@ -781,6 +784,12 @@ def _ensure_custom_layers_table():
             conn.commit()
         except Exception:
             conn.rollback()
+        # Add geojson column holding uploaded file layers' feature data
+        try:
+            cur.execute("ALTER TABLE user_custom_layers ADD COLUMN IF NOT EXISTS geojson TEXT DEFAULT NULL")
+            conn.commit()
+        except Exception:
+            conn.rollback()
     except Exception as e:
         conn.rollback()
         print(f"[WARNING] Custom layers table creation failed: {e}")
@@ -803,11 +812,13 @@ def save_custom_layer(request: SaveCustomLayerRequest):
         """, (request.user_email.strip(),))
         next_order = cur.fetchone()[0]
         cur.execute("""
-            INSERT INTO user_custom_layers (user_email, service_key, label, url, folder, type, state, sort_order, saved_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+            INSERT INTO user_custom_layers (user_email, service_key, label, url, folder, type, state, sort_order, geojson, saved_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
             ON CONFLICT (user_email, service_key)
             DO UPDATE SET label = EXCLUDED.label, url = EXCLUDED.url, folder = EXCLUDED.folder,
-                          type = EXCLUDED.type, state = EXCLUDED.state, saved_at = CURRENT_TIMESTAMP
+                          type = EXCLUDED.type, state = EXCLUDED.state, saved_at = CURRENT_TIMESTAMP,
+                          -- a rename/move posts no geojson; keep the stored features in that case
+                          geojson = COALESCE(EXCLUDED.geojson, user_custom_layers.geojson)
         """, (
             request.user_email.strip(),
             request.service_key.strip(),
@@ -817,6 +828,7 @@ def save_custom_layer(request: SaveCustomLayerRequest):
             request.type.strip(),
             request.state.strip(),
             next_order,
+            request.geojson,
         ))
         # Auto-create the parent folder so it persists even when all services are removed
         folder = request.folder.strip()
@@ -860,6 +872,37 @@ def get_custom_layers(
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to load custom layers: {str(e)}")
+
+@arcgis_router.get("/custom-layers/geojson")
+def get_custom_layer_geojson(
+    user_email: str = Query(..., description="User email"),
+    service_key: str = Query(..., description="Custom layer service key"),
+):
+    """Feature data of a single uploaded custom layer. Kept out of the
+    /custom-layers list response so that panel load stays small — uploaded
+    shapefiles are routinely multi-megabyte."""
+    if cur is None:
+        raise HTTPException(status_code=500, detail="Database connection not available")
+    if not user_email or not user_email.strip():
+        raise HTTPException(status_code=400, detail="user_email is required")
+    if not service_key or not service_key.strip():
+        raise HTTPException(status_code=400, detail="service_key is required")
+
+    _ensure_custom_layers_table()
+    try:
+        cur.execute("""
+            SELECT geojson FROM user_custom_layers
+            WHERE user_email = %s AND service_key = %s
+        """, (user_email.strip(), service_key.strip()))
+        row = cur.fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Custom layer not found")
+        return {"geojson": json.loads(row[0]) if row[0] else None}
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to load custom layer geojson: {str(e)}")
 
 @arcgis_router.delete("/custom-layers")
 def delete_custom_layer(request: DeleteCustomLayerRequest):

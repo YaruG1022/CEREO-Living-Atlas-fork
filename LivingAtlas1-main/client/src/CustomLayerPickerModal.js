@@ -1,18 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSearch, faTimes } from '@fortawesome/free-solid-svg-icons';
+import { fetchCustomLayers } from './arcgisServicesDb';
 import './ArcGISPickerModal.css';
-
-const UPLOADED_LAYERS_META_KEY = 'custom_layers_uploaded_meta';
-
-function getUploadedLayersMeta() {
-    try {
-        return JSON.parse(localStorage.getItem(UPLOADED_LAYERS_META_KEY) || '[]');
-    } catch {
-        return [];
-    }
-}
 
 /**
  * Picker modal for uploaded custom layers (GeoJSON/KML/Shapefile).
@@ -25,8 +16,17 @@ function getUploadedLayersMeta() {
 function CustomLayerPickerModal({ onAdd, onClose }) {
     const [search, setSearch] = useState('');
     const [selected, setSelected] = useState(new Map()); // key → layer meta
+    const [layers, setLayers] = useState([]);
 
-    const layers = useMemo(() => getUploadedLayersMeta(), []);
+    useEffect(() => {
+        let active = true;
+        const userEmail = localStorage.getItem('email') || '';
+        if (!userEmail) return;
+        fetchCustomLayers(userEmail)
+            .then(all => { if (active) setLayers(all.filter(s => s.type === 'uploaded')); })
+            .catch(err => console.warn('[CustomLayerPickerModal] Failed to load custom layers:', err));
+        return () => { active = false; };
+    }, []);
 
     const filtered = useMemo(() => {
         if (!search.trim()) return layers;

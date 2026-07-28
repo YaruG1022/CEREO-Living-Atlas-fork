@@ -383,7 +383,9 @@ export async function clearAllRemovedServices() {
 
 // --- Custom Layers (per-user) ---
 
-// Save a layer to user's custom layers
+// Save a layer to user's custom layers.
+// `service.geojson` (a FeatureCollection) is only passed for uploaded file layers;
+// omitting it on a re-save (e.g. rename) leaves the stored features untouched.
 export async function saveCustomLayer(userEmail, service) {
     try {
         console.log(`[arcgisServicesDb] Saving custom layer ${service.key} for ${userEmail}...`);
@@ -395,6 +397,7 @@ export async function saveCustomLayer(userEmail, service) {
             folder: service.folder || 'Root',
             type: service.type || 'MapServer',
             state: service.state || '',
+            geojson: service.geojson ? JSON.stringify(service.geojson) : null,
         });
         console.log(`[arcgisServicesDb] Successfully saved custom layer ${service.key}`);
         return response.data;
@@ -435,6 +438,16 @@ export async function fetchCustomLayers(userEmail) {
         console.warn(`[arcgisServicesDb] Failed to fetch custom layers:`, error?.message || error);
         return [];
     }
+}
+
+// Fetch the feature data of a single uploaded custom layer. Kept separate from
+// fetchCustomLayers so the panel's initial load doesn't pull every uploaded
+// file's features at once.
+export async function fetchCustomLayerGeojson(userEmail, serviceKey) {
+    const response = await api.get('/arcgis/custom-layers/geojson', {
+        params: { user_email: userEmail, service_key: serviceKey },
+    });
+    return response.data?.geojson || null;
 }
 
 // Delete a layer from user's custom layers

@@ -9,7 +9,7 @@ import {
     fetchArcgisServiceInfo,
     fetchArcgisLayerInfo,
 } from './arcgisDataUtils';
-import { fetchCustomLayers, deleteCustomLayer, reorderCustomLayers, saveLayerOrder, fetchCustomFolders, createCustomFolder, deleteCustomFolder, renameCustomFolder, saveCustomLayer, fetchVisibleCustomLayerServiceKeys } from './arcgisServicesDb';
+import { fetchCustomLayers, deleteCustomLayer, reorderCustomLayers, saveLayerOrder, fetchCustomFolders, createCustomFolder, deleteCustomFolder, renameCustomFolder, saveCustomLayer, fetchVisibleCustomLayerServiceKeys, fetchCustomLayerGeojson } from './arcgisServicesDb';
 import { buildLayerTree, getAllLeafLayers, getDescendantLeafLayers, LayerTreeNode } from './LayerTree';
 import { filterUploadPanelData } from './arcgisUploadSearchUtils';
 import { buildMatchList, useSearchNav } from './arcgisSearchNavUtils';
@@ -23,6 +23,44 @@ import { parseGeoFile } from './geoFileUtils';
 import { faFolder } from '@fortawesome/free-regular-svg-icons';
 import ClearAllLayersButton from './ClearAllLayersButton';
 import CustomLayersPanelOnboarding from './OnboardingCustomLayersPanel';
+
+// Uploaded file layers used to live entirely in localStorage. They are now rows in
+// user_custom_layers like every other custom layer, so anything left behind from a
+// previous session is pushed to the DB once and then cleared locally.
+const LEGACY_UPLOADED_META_KEY = 'custom_layers_uploaded_meta';
+
+async function migrateLegacyUploadedLayers(userEmail) {
+    let meta;
+    try {
+        meta = JSON.parse(localStorage.getItem(LEGACY_UPLOADED_META_KEY) || '[]');
+    } catch {
+        meta = [];
+    }
+    if (!Array.isArray(meta) || meta.length === 0) return;
+
+    for (const m of meta) {
+        try {
+            const raw = localStorage.getItem(`uploaded_geojson_${m.key}`);
+            if (raw) {
+                await saveCustomLayer(userEmail, {
+                    key: m.key,
+                    label: m.label,
+                    url: `local://${m.key}`,
+                    folder: m.folder || 'Root',
+                    type: 'uploaded',
+                    state: '',
+                    geojson: JSON.parse(raw),
+                });
+            }
+            localStorage.removeItem(`uploaded_geojson_${m.key}`);
+        } catch (err) {
+            // Leave this entry's data in place so the next load can retry it.
+            console.warn('[CustomLayersPanel] Failed to migrate uploaded layer', m?.key, err);
+            return;
+        }
+    }
+    localStorage.removeItem(LEGACY_UPLOADED_META_KEY);
+}
 
 function CustomLayersPanel({
     isOpen,
@@ -78,13 +116,9 @@ function CustomLayersPanel({
     // Rename state
     const [renamingItem, setRenamingItem] = useState(null);
 
-    // Uploaded file layers stored entirely in localStorage
-    const UPLOADED_LAYERS_META_KEY = 'custom_layers_uploaded_meta';
-    const getUploadedLayersMeta = () => {
-        try { return JSON.parse(localStorage.getItem(UPLOADED_LAYERS_META_KEY) || '[]'); }
-        catch { return []; }
-    };
-    const saveUploadedLayersMeta = (list) => localStorage.setItem(UPLOADED_LAYERS_META_KEY, JSON.stringify(list));
+    // Feature data of uploaded layers, fetched from the DB on first use and kept
+    // here so toggling a layer off and on again doesn't refetch it.
+    const uploadedGeojsonCache = useRef({});
 
     const uploadInputRef = useRef(null);
 
@@ -142,35 +176,28 @@ function CustomLayersPanel({
         let active = true;
         (async () => {
             try {
+                // Fold any pre-DB localStorage uploads in before reading the list,
+                // so they come back as ordinary rows below.
+                await migrateLegacyUploadedLayers(userEmail);
                 const [layers, folders, visibleKeys] = await Promise.all([
                     fetchCustomLayers(userEmail),
                     fetchCustomFolders(userEmail),
                     fetchVisibleCustomLayerServiceKeys(),
                 ]);
                 if (active) {
-                    const uploadedMeta = getUploadedLayersMeta();
-                    const uploadedServices = uploadedMeta.map(m => ({
-                        key: m.key,
-                        label: m.label,
-                        url: `local://${m.key}`,
-                        type: 'uploaded',
-                        folder: m.folder || 'Root',
-                        sort_order: m.sort_order || 0,
-                        state: '',
-                    }));
                     const uploadedLayerStates = {};
                     const visibleKeySet = new Set(visibleKeys);
                     const autoCheckedLayerIds = {};
                     const autoServiceLayerAdded = {};
-                    uploadedMeta.forEach(m => {
-                        uploadedLayerStates[m.key] = [{ id: 0, name: m.label, type: 'Feature Layer' }];
-                        if (visibleKeySet.has(m.key)) {
-                            autoCheckedLayerIds[m.key] = [0];
-                            autoServiceLayerAdded[m.key] = true;
+                    layers.filter(s => s.type === 'uploaded').forEach(s => {
+                        uploadedLayerStates[s.key] = [{ id: 0, name: s.label, type: 'Feature Layer' }];
+                        if (visibleKeySet.has(s.key)) {
+                            autoCheckedLayerIds[s.key] = [0];
+                            autoServiceLayerAdded[s.key] = true;
                         }
                     });
                     unstable_batchedUpdates(() => {
-                        setCustomServices([...layers, ...uploadedServices]);
+                        setCustomServices(layers);
                         setDbFolders(folders);
                         if (Object.keys(uploadedLayerStates).length > 0) {
                             setServiceLayers(prev => ({ ...prev, ...uploadedLayerStates }));
@@ -490,6 +517,13 @@ function CustomLayersPanel({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [customServices, currentPath]);
 
+    const getUploadedGeojson = useCallback(async (serviceKey) => {
+        if (uploadedGeojsonCache.current[serviceKey]) return uploadedGeojsonCache.current[serviceKey];
+        const geojson = await fetchCustomLayerGeojson(userEmail, serviceKey);
+        if (geojson) uploadedGeojsonCache.current[serviceKey] = geojson;
+        return geojson;
+    }, [userEmail]);
+
     // --- Map interaction: add/remove raster + vector layers per layer (matches ArcgisUploadPanel) ---
     useEffect(() => {
         const map = mapInstance && mapInstance();
@@ -510,18 +544,18 @@ function CustomLayersPanel({
                     });
                     if (map.getSource(sourceId)) map.removeSource(sourceId);
                 } else if (!wasOn && isOn) {
-                    try {
-                        const rawGeojson = localStorage.getItem(`uploaded_geojson_${service.key}`);
-                        if (rawGeojson && !map.getSource(sourceId)) {
-                            const geojson = JSON.parse(rawGeojson);
-                            map.addSource(sourceId, { type: 'geojson', data: geojson });
-                            map.addLayer({ id: `uploaded-fill-${service.key}`, type: 'fill', source: sourceId, paint: { 'fill-color': '#3388ff', 'fill-opacity': layerOpacity * 0.35 } });
-                            map.addLayer({ id: `uploaded-line-${service.key}`, type: 'line', source: sourceId, paint: { 'line-color': '#1a66ff', 'line-width': 2, 'line-opacity': layerOpacity } });
-                            map.addLayer({ id: `uploaded-circle-${service.key}`, type: 'circle', source: sourceId, filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 5, 'circle-color': '#3388ff', 'circle-opacity': layerOpacity } });
-                        }
-                    } catch (err) {
+                    getUploadedGeojson(service.key).then(geojson => {
+                        // The fetch is async, so re-check that the layer is still
+                        // checked and not already on the map before drawing it.
+                        const stillOn = (prevCheckedLayerIds.current[service.key] || []).length > 0;
+                        if (!geojson || !stillOn || map.getSource(sourceId)) return;
+                        map.addSource(sourceId, { type: 'geojson', data: geojson });
+                        map.addLayer({ id: `uploaded-fill-${service.key}`, type: 'fill', source: sourceId, paint: { 'fill-color': '#3388ff', 'fill-opacity': layerOpacity * 0.35 } });
+                        map.addLayer({ id: `uploaded-line-${service.key}`, type: 'line', source: sourceId, paint: { 'line-color': '#1a66ff', 'line-width': 2, 'line-opacity': layerOpacity } });
+                        map.addLayer({ id: `uploaded-circle-${service.key}`, type: 'circle', source: sourceId, filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 5, 'circle-color': '#3388ff', 'circle-opacity': layerOpacity } });
+                    }).catch(err => {
                         console.warn('[CustomLayersPanel] Failed to add uploaded layer to map:', err);
-                    }
+                    });
                 }
                 prevCheckedLayerIds.current[service.key] = currChecked;
                 return; // skip ArcGIS handling for uploaded layers
@@ -960,7 +994,10 @@ function CustomLayersPanel({
         setCustomServices(prev => prev.map(s => s.key === serviceKey ? { ...s, label: newLabel } : s));
         const service = customServices.find(s => s.key === serviceKey);
         if (service?.type === 'uploaded') {
-            saveUploadedLayersMeta(getUploadedLayersMeta().map(m => m.key === serviceKey ? { ...m, label: newLabel } : m));
+            // No geojson in the payload — the stored features are left untouched.
+            saveCustomLayer(userEmail, { ...service, label: newLabel }).catch(err =>
+                console.warn('[CustomLayersPanel] Failed to rename uploaded layer:', err)
+            );
         }
     };
 
@@ -1152,9 +1189,9 @@ function CustomLayersPanel({
             const key = `uploaded_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
             const label = file.name.replace(/\.(geojson|json|kml|zip)$/i, '');
             const folder = currentPath || 'Root';
-            localStorage.setItem(`uploaded_geojson_${key}`, JSON.stringify(geojson));
-            saveUploadedLayersMeta([...getUploadedLayersMeta(), { key, label, folder, sort_order: Date.now() }]);
             const newService = { key, label, url: `local://${key}`, type: 'uploaded', folder, sort_order: Date.now(), state: '' };
+            await saveCustomLayer(userEmail, { ...newService, geojson });
+            uploadedGeojsonCache.current[key] = geojson;
             unstable_batchedUpdates(() => {
                 setCustomServices(prev => [...prev, newService]);
                 setServiceLayers(prev => ({ ...prev, [key]: [{ id: 0, name: label, type: 'Feature Layer' }] }));
@@ -1217,12 +1254,8 @@ function CustomLayersPanel({
         const service = contextMenu.data.service;
         closeContextMenu();
         try {
-            if (service.type === 'uploaded') {
-                localStorage.removeItem(`uploaded_geojson_${service.key}`);
-                saveUploadedLayersMeta(getUploadedLayersMeta().filter(m => m.key !== service.key));
-            } else {
-                await deleteCustomLayer(userEmail, service.key);
-            }
+            await deleteCustomLayer(userEmail, service.key);
+            delete uploadedGeojsonCache.current[service.key];
             removeAllMapLayers(service);
             setCustomServices(prev => prev.filter(s => s.key !== service.key));
             setServiceLayerAdded(prev => { const n = { ...prev }; delete n[service.key]; return n; });
