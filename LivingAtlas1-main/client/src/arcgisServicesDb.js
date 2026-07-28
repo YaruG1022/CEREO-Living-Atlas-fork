@@ -536,3 +536,16 @@ export async function fetchVisibleCustomLayerServiceKeys() {
         return [];
     }
 }
+
+// { service_key, layer_id } pairs of ArcGIS (non-custom-upload) links marked visible
+// on any card, so they can auto-restore on the map without needing a card's
+// learn-more modal to be opened first.
+export async function fetchVisibleArcgisLayerTargets() {
+    try {
+        const response = await api.get('/cardArcGISLinks/visible-arcgis-layers');
+        return Array.isArray(response.data?.items) ? response.data.items : [];
+    } catch (error) {
+        console.warn('[arcgisServicesDb] Failed to fetch visible ArcGIS layer targets:', error?.message || error);
+        return [];
+    }
+}

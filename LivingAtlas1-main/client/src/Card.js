@@ -161,22 +161,34 @@ function Card(props) {
     }, [props.isFavorited]);
 
     // Split fetched card links into ArcGIS vs custom-layer items, and restore
-    // custom-layer visibility from the DB-persisted is_visible flag so it
-    // survives modal close/reopen and page reloads instead of resetting.
+    // both checkbox groups' visibility from the DB-persisted is_visible flag so
+    // it survives modal close/reopen and page reloads instead of resetting.
     const applyFetchedCardLinks = useCallback((all) => {
-        setLinkedArcgisItems(all.filter(i => i.item_type !== 'uploaded_custom'));
+        const arcgisItems = all.filter(i => i.item_type !== 'uploaded_custom');
+        setLinkedArcgisItems(arcgisItems);
+        const arcgisCheckedMap = {};
+        arcgisItems.forEach(item => {
+            if (item.is_visible) {
+                arcgisCheckedMap[item.id] = true;
+                window.dispatchEvent(new CustomEvent('arcgis-layer-toggle', {
+                    detail: { serviceKey: item.service_key, layerId: item.layer_id, checked: true },
+                }));
+            }
+        });
+        setLinkedArcgisChecked(prev => ({ ...prev, ...arcgisCheckedMap }));
+
         const customItems = all.filter(i => i.item_type === 'uploaded_custom');
         setLinkedCustomLayerItems(customItems);
-        const checkedMap = {};
+        const customCheckedMap = {};
         customItems.forEach(item => {
             if (item.is_visible) {
-                checkedMap[item.id] = true;
+                customCheckedMap[item.id] = true;
                 window.dispatchEvent(new CustomEvent('custom-layer-toggle', {
                     detail: { serviceKey: item.service_key, checked: true },
                 }));
             }
         });
-        setLinkedCustomLayerChecked(checkedMap);
+        setLinkedCustomLayerChecked(customCheckedMap);
     }, []);
 
     useEffect(() => {
@@ -248,6 +260,15 @@ function Card(props) {
             }));
         });
     }, [isModalOpen, linkedArcgisItems, pinnedArcgisItems]);
+
+    const handleToggleArcgisLayer = (item, nowChecked) => {
+        window.dispatchEvent(new CustomEvent('arcgis-layer-toggle', {
+            detail: { serviceKey: item.service_key, layerId: item.layer_id, checked: nowChecked },
+        }));
+        // Persist to DB so the shown/hidden state survives modal close/reopen and reloads.
+        api.patch(`/cardArcGISLinks/${item.id}`, { is_visible: nowChecked })
+            .catch(err => console.warn('Failed to save ArcGIS layer visibility:', err));
+    };
 
     const handleToggleCustomLayer = (item, nowChecked) => {
         window.dispatchEvent(new CustomEvent('custom-layer-toggle', {
@@ -2517,13 +2538,7 @@ function Card(props) {
                                                     onChange={() => {
                                                         const nowChecked = !isLayerChecked;
                                                         setLinkedArcgisChecked(prev => ({ ...prev, [item.id]: nowChecked }));
-                                                        window.dispatchEvent(new CustomEvent('arcgis-layer-toggle', {
-                                                            detail: {
-                                                                serviceKey: item.service_key,
-                                                                layerId: item.layer_id,
-                                                                checked: nowChecked,
-                                                            }
-                                                        }));
+                                                        handleToggleArcgisLayer(item, nowChecked);
                                                     }}
                                                 />
                                             </label>

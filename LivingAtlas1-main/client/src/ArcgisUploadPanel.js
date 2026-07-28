@@ -9,14 +9,15 @@ import {
     fetchArcgisServiceInfo,
     fetchArcgisLayerInfo
 } from './arcgisDataUtils';
-import { 
+import {
     fetchServicesByStateMap,
-    removeArcgisService, 
-    renameFolderServices, 
+    removeArcgisService,
+    renameFolderServices,
     renameService,
     saveLayerSelections,
     loadLayerSelections,
-    saveCustomLayer
+    saveCustomLayer,
+    fetchVisibleArcgisLayerTargets
 } from './arcgisServicesDb'; // Fetch from DB
 import { updateCurrentStateServices } from './arcgisUpdateServices';
 import ArcgisRenameItem from './ArcgisRenameItem';
@@ -253,6 +254,9 @@ function ArcgisUploadPanel({
     // Direct layer toggle (from learn-more modal checkboxes — no panel open required)
     const pendingDirectTogglesRef = useRef([]);
     const [directToggleTick, setDirectToggleTick] = useState(0);
+    // Tracks whether the DB-persisted "visible" ArcGIS links (learn-more modal checkboxes)
+    // have already been fetched & auto-restored once for this mount.
+    const visibleArcgisLinksLoadedRef = useRef(false);
     // Bumped once the Mapbox map + style are ready, so layer-rendering effects that
     // ran too early (e.g. auto-loading pinned layers right after a page refresh)
     // get re-run and actually add their layers.
@@ -965,6 +969,29 @@ function ArcgisUploadPanel({
         userEmail,
         servicesInitialLoadDone,
     ]);
+
+    // Auto-restore ArcGIS links whose learn-more-modal checkbox was left checked
+    // (is_visible = true in CardArcGISLinks), same as the pinned-items effect above:
+    // runs regardless of whether this panel is open, so a refresh doesn't silently
+    // hide a layer the user had shown. Routed through the same direct-toggle
+    // pipeline used by pins and by the live checkbox toggle.
+    useEffect(() => {
+        if (visibleArcgisLinksLoadedRef.current) return;
+        if (!servicesInitialLoadDone) return;
+        visibleArcgisLinksLoadedRef.current = true;
+
+        fetchVisibleArcgisLayerTargets().then(items => {
+            if (!items.length) return;
+            const togglesToDispatch = items.map(i => ({ serviceKey: i.service_key, layerId: i.layer_id ?? null, checked: true }));
+            pendingDirectTogglesRef.current = [
+                ...pendingDirectTogglesRef.current.filter(
+                    t => !togglesToDispatch.some(n => n.serviceKey === t.serviceKey && n.layerId === t.layerId)
+                ),
+                ...togglesToDispatch,
+            ];
+            setDirectToggleTick(t => t + 1);
+        });
+    }, [servicesInitialLoadDone]);
 
     // On state change: remove any ArcGIS layers/sources left from the previous state
     // NOTE: Disabled since states are now all loaded together as top-level folders
