@@ -13,11 +13,14 @@ export async function showArcgisPopup(e, layer) {
     let layerMeta = {};
     const serviceUrl = layer.serviceUrl; // must be passed in layer object
 
-    try {
-        const resp = await fetch(`${serviceUrl}/${layer.id}?f=json`);
-        layerMeta = await resp.json();
-    } catch (err) {
-        layerMeta = {};
+    // Uploaded file layers have no service to describe them; they pass their own name instead.
+    if (serviceUrl) {
+        try {
+            const resp = await fetch(`${serviceUrl}/${layer.id}?f=json`);
+            layerMeta = await resp.json();
+        } catch (err) {
+            layerMeta = {};
+        }
     }
     const layerName = layerMeta.name || layer.name || "Layer";
     const rawDescription = layerMeta.description || "";
@@ -28,6 +31,8 @@ export async function showArcgisPopup(e, layer) {
     const descShort = layerDescription.length > 120 ? layerDescription.slice(0, 120) + "..." : layerDescription;
     const hasLongDesc = layerDescription.length > 120;
     const descId = `desc-${layer.id}-${feature.properties.OBJECTID || Math.floor(Math.random()*100000)}`;
+
+    const propertyEntries = Object.entries(feature.properties || {});
 
     let html = `
   <div class="arcgis-popup-wrapper">
@@ -45,7 +50,9 @@ export async function showArcgisPopup(e, layer) {
     ` : ""}
     <table>
       <tbody>
-        ${Object.entries(feature.properties).map(([key, value]) =>
+        ${propertyEntries.length === 0
+          ? `<tr><td style="color:#777;">No attributes for this feature.</td></tr>`
+          : propertyEntries.map(([key, value]) =>
           `<tr>
             <td style="font-weight:bold;padding-right:6px;vertical-align:top;">${key}</td>
             <td style="word-break:break-word;overflow-wrap:anywhere;">${String(value)}</td>

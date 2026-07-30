@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { createPortal, unstable_batchedUpdates } from "react-dom";
 import { addArcgisVectorLayer } from './arcgisVectorUtils';
+import { addUploadedVectorLayer, removeUploadedVectorLayer, setUploadedVectorOpacity, uploadedSourceId } from './uploadedVectorUtils';
 import { showArcgisPopup } from './arcgisPopupUtils';
 import {
     fetchArcgisLayers,
@@ -536,23 +537,15 @@ function CustomLayersPanel({
                 const currChecked = checkedLayerIds[service.key] || [];
                 const wasOn = prevChecked.length > 0;
                 const isOn = currChecked.length > 0;
-                const sourceId = `uploaded-source-${service.key}`;
-
                 if (wasOn && !isOn) {
-                    [`uploaded-fill-${service.key}`, `uploaded-line-${service.key}`, `uploaded-circle-${service.key}`].forEach(lid => {
-                        if (map.getLayer(lid)) map.removeLayer(lid);
-                    });
-                    if (map.getSource(sourceId)) map.removeSource(sourceId);
+                    removeUploadedVectorLayer(map, service.key);
                 } else if (!wasOn && isOn) {
                     getUploadedGeojson(service.key).then(geojson => {
                         // The fetch is async, so re-check that the layer is still
                         // checked and not already on the map before drawing it.
                         const stillOn = (prevCheckedLayerIds.current[service.key] || []).length > 0;
-                        if (!geojson || !stillOn || map.getSource(sourceId)) return;
-                        map.addSource(sourceId, { type: 'geojson', data: geojson });
-                        map.addLayer({ id: `uploaded-fill-${service.key}`, type: 'fill', source: sourceId, paint: { 'fill-color': '#3388ff', 'fill-opacity': layerOpacity * 0.35 } });
-                        map.addLayer({ id: `uploaded-line-${service.key}`, type: 'line', source: sourceId, paint: { 'line-color': '#1a66ff', 'line-width': 2, 'line-opacity': layerOpacity } });
-                        map.addLayer({ id: `uploaded-circle-${service.key}`, type: 'circle', source: sourceId, filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 5, 'circle-color': '#3388ff', 'circle-opacity': layerOpacity } });
+                        if (!geojson || !stillOn || map.getSource(uploadedSourceId(service.key))) return;
+                        addUploadedVectorLayer(map, service, geojson, layerOpacity);
                     }).catch(err => {
                         console.warn('[CustomLayersPanel] Failed to add uploaded layer to map:', err);
                     });
@@ -726,14 +719,9 @@ function CustomLayersPanel({
                 } else if (l.type === 'circle') {
                     map.setPaintProperty(l.id, 'circle-opacity', newOpacity);
                 }
-            } else if (l.id.startsWith('uploaded-fill-')) {
-                map.setPaintProperty(l.id, 'fill-opacity', newOpacity * 0.35);
-            } else if (l.id.startsWith('uploaded-line-')) {
-                map.setPaintProperty(l.id, 'line-opacity', newOpacity);
-            } else if (l.id.startsWith('uploaded-circle-')) {
-                map.setPaintProperty(l.id, 'circle-opacity', newOpacity);
             }
         });
+        setUploadedVectorOpacity(map, newOpacity);
     };
 
     const INFO_MODAL_WIDTH = 380;
@@ -777,11 +765,7 @@ function CustomLayersPanel({
         if (!map) return;
 
         if (service.type === 'uploaded') {
-            [`uploaded-fill-${service.key}`, `uploaded-line-${service.key}`, `uploaded-circle-${service.key}`].forEach(lid => {
-                if (map.getLayer(lid)) map.removeLayer(lid);
-            });
-            const sourceId = `uploaded-source-${service.key}`;
-            if (map.getSource(sourceId)) map.removeSource(sourceId);
+            removeUploadedVectorLayer(map, service.key);
             return;
         }
 
