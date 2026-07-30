@@ -21,6 +21,8 @@ function ChangelogModal({ isOpen, onClose }) {
                         <h4>Custom Layers Panel</h4>
                         <ul className="changelog-list">
                           <li>Added an upload button to the Custom Layers Panel for importing GeoJSON, Shapefile (zip), and KML files — such as drainage basin shapes exported from StreamStats — as layers; uploaded layers can be renamed or deleted from the same right-click menu as other custom layers.</li>
+                          <li>Uploaded layers are now saved to your account instead of your browser's local storage, so they stay with you across devices and browsers and survive clearing your browsing data; layers uploaded in earlier sessions are moved over automatically the first time you open the panel.</li>
+                          <li>Uploaded layers are now clickable on the map: hovering highlights the feature under the cursor, and clicking it opens an embedded popup listing that feature's attributes — the same interaction and appearance as ArcGIS layers.</li>
                         </ul>
 
                         <h4>Card Linking – Custom Layers</h4>
@@ -40,6 +42,8 @@ function ChangelogModal({ isOpen, onClose }) {
                           <li>Fixed an issue where checked layers in the Linked ArcGIS Services/Layers section didn't automatically load on the map when revisiting the page.</li>
                           <li>Updated the Learn More modal's coordinate card editing flow: replaced the outdated Select Location flow with Edit Coordinate (opens the same Add Points tool used elsewhere in the app) and Change Location Type (switch between Point, Polygon, and Image), removing the old flow that no longer matched the current Add Points modal.</li>
                           <li>Fixed an issue where creating a new card with coordinate points via the Add Points tool would show points left over from the previously created card the next time the Create Card modal was opened.</li>
+                          <li>Fixed the Learn More modal's Edit Coordinate flow showing the wrong markers while editing: the panel opened on a placeholder point instead of the card's actual coordinate points and their icons, and the card's original markers stayed behind on the map — keeping a copy at the old position and in the old color once a point was moved or restyled.</li>
+                          <li>Fixed an issue where changes saved from the Learn More modal — coordinate points, polygons, and image overlays included — did not appear on the map until the page was refreshed.</li>
                         </ul>
 
                         <h3>Update Date: 7/1 - 7/15/2026</h3>
