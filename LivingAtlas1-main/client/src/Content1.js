@@ -1110,6 +1110,9 @@ const Content1 = (props) => {
             if (isNaN(lng) || isNaN(lat)) return;
 
             const pointEl = buildMarkerIconElement(pt.icon, pt.markerColor || undefined);
+            // Lets the card's coordinate editor hide these while it shows its own
+            // editable copies (see Card.js hideCardPointMarkers).
+            pointEl.dataset.cardMarkerId = feature.cardID;
             if (pt.markerOpacity !== null && pt.markerOpacity !== undefined) {
               pointEl.style.opacity = pt.markerOpacity;
             }
@@ -1136,6 +1139,7 @@ const Content1 = (props) => {
         }
 
         const el = document.createElement('div');
+        el.dataset.cardMarkerId = feature.cardID;
         const normalizedCategory = (feature.category || '').toString().trim().toLowerCase();
 
         if (normalizedCategory === 'river') {

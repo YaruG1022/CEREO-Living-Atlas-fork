@@ -93,6 +93,8 @@ function Card(props) {
     // as opposed to editing an existing polygon/image card's own vertices.
     const [isConvertingLocationType, setIsConvertingLocationType] = useState(false);
     const [isEditingCoordinate, setIsEditingCoordinate] = useState(false);
+    // True while a coordinate edit is in progress or staged but not yet saved.
+    const [hideCardPointMarkers, setHideCardPointMarkers] = useState(false);
     const [isLocationTypeMenuOpen, setIsLocationTypeMenuOpen] = useState(false);
     const isEditingRef = useRef(false); // Track editing state across renders
     const learnMoreImageInputRef = useRef(null);
@@ -946,12 +948,29 @@ function Card(props) {
     }
 };
 
+    // Hide the card's own map markers from the moment the coordinate editor opens
+    // until the edit reaches the server (Content1 then re-creates them at the new
+    // position). Without this the pre-edit markers linger at the old position, in
+    // their old color, next to the editable copies the panel draws.
+    useEffect(() => {
+        const cardID = formData.cardID || props.cardID;
+        // isModalOpen stays true while the coordinate editor is up, so it also acts
+        // as a safety net: closing the card always brings its markers back.
+        if (!cardID || !hideCardPointMarkers || !isModalOpen) return undefined;
+        const selector = `[data-card-marker-id="${cardID}"]`;
+        document.querySelectorAll(selector).forEach(el => { el.style.display = 'none'; });
+        return () => {
+            document.querySelectorAll(selector).forEach(el => { el.style.display = ''; });
+        };
+    }, [hideCardPointMarkers, isModalOpen, formData.cardID, props.cardID]);
+
     // Edit an existing point card's coordinate(s): hide the learn-more modal and
     // open the same "Add Points" tool used by the map's "Add card from map" toolbar.
     const handleEditCoordinate = useCallback(() => {
         const map = window.atlasMapInstance;
         if (!map) { console.error('Map not found'); return; }
         setIsLocationTypeMenuOpen(false);
+        setHideCardPointMarkers(true);
         setIsEditingCoordinate(true);
         const lat = parseFloat(formData.latitude);
         const lng = parseFloat(formData.longitude);
@@ -967,6 +986,18 @@ function Card(props) {
                 ...prev,
                 latitude: Number(first.lat).toFixed(6),
                 longitude: Number(first.lng).toFixed(6),
+                // Multi-point cards are rendered from polygon_vertices, so the edited
+                // points have to be written back there too — updating lat/lng alone
+                // leaves the card's markers untouched.
+                ...(prev.location_type === 'multipoint' ? {
+                    polygon_vertices: points.map(p => ({
+                        lat: p.lat,
+                        lng: p.lng,
+                        icon: p.icon,
+                        markerColor: p.color,
+                        markerOpacity: p.opacity,
+                    })),
+                } : {}),
             }));
         }
         setIsEditingCoordinate(false);
@@ -976,6 +1007,7 @@ function Card(props) {
     }, []);
 
     const handleCoordinateEditCancel = useCallback(() => {
+        setHideCardPointMarkers(false);
         setIsEditingCoordinate(false);
     }, []);
 
@@ -1335,6 +1367,7 @@ function Card(props) {
         if (isImageMutationLoading) return;
 
         // Clean up any active coordinate editing
+        setHideCardPointMarkers(false);
         setIsEditingCoordinate(false);
 
         setIsImageMutationLoading(true);
@@ -1421,6 +1454,11 @@ function Card(props) {
             }
             await refreshCardRecord();
             await refreshCardImages();
+            // This save path skips the page reload, so the map still shows the
+            // pre-edit markers and polygons. Ask Content1/Content2 to re-fetch, the
+            // same way creating a card from the map does.
+            setHideCardPointMarkers(false);
+            window.dispatchEvent(new CustomEvent('atlas:card-uploaded'));
             setIsLearnMoreEditMode(false);
             setLearnMoreBackup(null);
             setSessionUploadedImageIDs([]);
@@ -3160,6 +3198,20 @@ function Card(props) {
             {isEditingCoordinate && (
                 <CoordinatesPanel
                     initialPoints={(() => {
+                        // Multi-point cards keep their real points (and per-point icon /
+                        // color / opacity) in polygon_vertices — latitude/longitude is only
+                        // the card's representative coordinate, so editing from it alone
+                        // would show a phantom default marker instead of the card's points.
+                        const verts = formData.polygon_vertices;
+                        if (formData.location_type === 'multipoint' && Array.isArray(verts) && verts.length > 0) {
+                            return verts.map(v => ({
+                                lat: parseFloat(v.lat),
+                                lng: parseFloat(v.lng),
+                                icon: v.icon,
+                                color: v.markerColor,
+                                opacity: v.markerOpacity,
+                            }));
+                        }
                         const lat = parseFloat(formData.latitude);
                         const lng = parseFloat(formData.longitude);
                         return (!isNaN(lat) && !isNaN(lng)) ? [{ lat, lng }] : [];
