@@ -12,11 +12,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faFloppyDisk, faSquare, faDownload, faCircleCheck, faCaretDown } from '@fortawesome/free-solid-svg-icons';
+import { faFloppyDisk, faSquare, faDownload, faCircleCheck, faCaretDown, faLink, faUnlink } from '@fortawesome/free-solid-svg-icons';
 import shpwrite from '@mapbox/shp-write';
 import tokml from 'tokml';
+import api from './api';
 import { getArcgisTileUrl } from './arcgisDataUtils';
 import { applyArcgisVectorLayerFilter } from './arcgisVectorUtils';
+import SelectCardModal from './SelectCardModal';
 
 export const EARLIEST_TIMELINE_YEAR = 2000;
 const MONTH_VALUES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
@@ -265,6 +267,84 @@ export function ServiceInfoModal({
     const [timeFilterByKey, setTimeFilterByKey] = usePersistentState(onboardingPrefix, 'timeFilterByKey', {});
     const [saveSuccessMsg, setSaveSuccessMsg] = useState(null);
 
+    // Uploaded custom services can be linked to cards. This creates the same
+    // CardArcGISLinks records (item_type 'uploaded_custom') as the card's
+    // learn-more "Linked Custom Layers" feature, so links are interchangeable.
+    const [linkedCards, setLinkedCards] = useState([]); // { id, card_id, card_title }
+    const [isSelectCardOpen, setIsSelectCardOpen] = useState(false);
+    const [isLinking, setIsLinking] = useState(false);
+
+    const isUploadedCustom = !!(service && service.type === 'uploaded');
+
+    // Load the cards this uploaded service is already linked to, and reset the
+    // select-card modal whenever the open service changes / closes.
+    useEffect(() => {
+        setIsSelectCardOpen(false);
+        if (!serviceKey || !isUploadedCustom) {
+            setLinkedCards([]);
+            return;
+        }
+        let active = true;
+        api.get('/cardArcGISLinks/by-service', { params: { service_key: serviceKey } })
+            .then(res => {
+                const raw = res?.data?.data || [];
+                if (active) setLinkedCards(Array.isArray(raw) ? raw : []);
+            })
+            .catch(err => console.warn('[ServiceInfoModal] Failed to load linked cards:', err));
+        return () => { active = false; };
+    }, [serviceKey, isUploadedCustom]);
+
+    const handleLinkCards = async (selectedCards) => {
+        setIsSelectCardOpen(false);
+        if (!service || !service.key || !Array.isArray(selectedCards) || selectedCards.length === 0) return;
+        setIsLinking(true);
+        const newLinks = [];
+        for (const card of selectedCards) {
+            if (card.cardID == null) continue;
+            try {
+                const res = await api.post('/cardArcGISLinks', {
+                    card_id: card.cardID,
+                    service_key: service.key,
+                    layer_id: null,
+                    sublayer_index: null,
+                    display_name: service.label,
+                    item_type: 'uploaded_custom',
+                    state_code: '',
+                    folder_name: service.folder || 'Root',
+                });
+                newLinks.push({
+                    id: res.data.id,
+                    card_id: card.cardID,
+                    card_title: card.title || `Card #${card.cardID}`,
+                });
+            } catch (err) {
+                console.error('[ServiceInfoModal] Failed to link card:', err);
+            }
+        }
+        if (newLinks.length > 0) {
+            setLinkedCards(prev => [...prev, ...newLinks]);
+        }
+        setIsLinking(false);
+    };
+
+    const handleUnlinkCard = async (linkId) => {
+        try {
+            await api.delete(`/cardArcGISLinks/${linkId}`);
+            setLinkedCards(prev => prev.filter(c => c.id !== linkId));
+        } catch (err) {
+            console.error('[ServiceInfoModal] Failed to remove card link:', err);
+        }
+    };
+
+    const handleOpenLinkedCard = (cardId) => {
+        if (cardId == null) return;
+        // The card panel (Content2) listens for this event and opens the
+        // card's learn-more modal.
+        window.dispatchEvent(new CustomEvent('atlas:open-card-learn-more', {
+            detail: { cardID: cardId },
+        }));
+    };
+
     if (!serviceKey) return null;
 
     const mapKey = `${mapKeyPrefix}${serviceKey}`;
@@ -310,9 +390,85 @@ export function ServiceInfoModal({
         </div>
     );
 
+    // Linked Cards section — only for user-uploaded custom services. The link
+    // records are identical to the card learn-more "Linked Custom Layers" links,
+    // so the card's learn-more modal shows this service automatically.
+    const renderCardLinks = () => {
+        if (!isUploadedCustom) return null;
+        return (
+            <div className="arcgis-service-info-row" data-onboarding-target={`${onboardingPrefix}-service-info-card-links`}>
+                <strong>Linked Cards:</strong>
+                {linkedCards.length === 0 ? (
+                    <div className="arcgis-service-info-empty">No linked cards.</div>
+                ) : (
+                    <ul style={{ listStyle: 'none', margin: '6px 0 0', padding: 0 }}>
+                        {linkedCards.map(link => (
+                            <li key={link.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0' }}>
+                                <button
+                                    type="button"
+                                    title={`Open "${link.card_title || 'card'}"`}
+                                    onClick={() => handleOpenLinkedCard(link.card_id)}
+                                    style={{
+                                        color: '#1976d2',
+                                        textDecoration: 'underline',
+                                        background: 'none',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        fontSize: '13px',
+                                        padding: 0,
+                                        textAlign: 'left',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap',
+                                        maxWidth: '280px',
+                                    }}
+                                >
+                                    {link.card_title || `Card #${link.card_id}`}
+                                </button>
+                                <button
+                                    type="button"
+                                    title="Remove link"
+                                    onClick={() => handleUnlinkCard(link.id)}
+                                    style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        color: '#999',
+                                        padding: '2px 4px',
+                                        flexShrink: 0,
+                                        fontSize: '12px',
+                                    }}
+                                >
+                                    <FontAwesomeIcon icon={faUnlink} />
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+                <button
+                    type="button"
+                    className="arcgis-service-info-save-btn"
+                    onClick={() => setIsSelectCardOpen(true)}
+                    title="Link this service to one or more cards"
+                    style={{ ...SAVE_BTN_STYLE, marginTop: '8px' }}
+                    disabled={isLinking}
+                >
+                    <FontAwesomeIcon icon={faLink} style={{ fontSize: '12px' }} />
+                    {isLinking ? 'Linking…' : 'Link to Card'}
+                </button>
+            </div>
+        );
+    };
+
     return (
         <div className="arcgis-service-info-modal" style={getStyle()} data-onboarding-target={`${onboardingPrefix}-service-info-modal`}>
             {saveSuccessMsg && <SaveSuccessModal message={saveSuccessMsg} onClose={() => setSaveSuccessMsg(null)} />}
+            {isSelectCardOpen && (
+                <SelectCardModal
+                    onAdd={handleLinkCards}
+                    onClose={() => setIsSelectCardOpen(false)}
+                />
+            )}
             <div className="arcgis-service-info-modal-header">
                 <strong>Service info</strong>
                 <button
@@ -332,6 +488,7 @@ export function ServiceInfoModal({
                         return (
                             <div>
                                 <div className="arcgis-service-info-empty">No information available.</div>
+                                {renderCardLinks()}
                                 {renderActions('empty-actions')}
                             </div>
                         );
@@ -698,6 +855,7 @@ export function ServiceInfoModal({
                                 </div>
                             )}
 
+                            {renderCardLinks()}
                             {renderActions('actions')}
                         </div>
                     );

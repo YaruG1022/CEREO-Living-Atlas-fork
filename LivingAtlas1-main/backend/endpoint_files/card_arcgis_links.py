@@ -62,6 +62,32 @@ def get_card_arcgis_links(card_id: int = Query(...)):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+@card_arcgis_links_router.get("/cardArcGISLinks/by-service")
+def get_card_arcgis_links_by_service(service_key: str = Query(...)):
+    """Card links for a given service_key (joined with the card title), used by
+    the Custom Layers Panel's service-info modal to show which cards an uploaded
+    service is linked to."""
+    try:
+        with conn.cursor() as c:
+            c.execute("""
+                SELECT l.id, l.card_id, c.Title AS card_title, l.service_key,
+                       l.layer_id, l.sublayer_index, l.display_name,
+                       l.item_type, l.state_code, l.folder_name, l.is_visible
+                FROM CardArcGISLinks l
+                LEFT JOIN Cards c ON c.CardID = l.card_id
+                WHERE l.service_key = %s
+                ORDER BY l.id ASC
+            """, (service_key,))
+            rows = c.fetchall()
+        columns = ["id", "card_id", "card_title", "service_key", "layer_id",
+                   "sublayer_index", "display_name", "item_type", "state_code",
+                   "folder_name", "is_visible"]
+        return {"data": [dict(zip(columns, row)) for row in rows]}
+    except Exception as e:
+        print(f"[CardArcGISLinks] GET by-service error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
 @card_arcgis_links_router.post("/cardArcGISLinks")
 def create_card_arcgis_link(link: LinkCreate):
     try:
