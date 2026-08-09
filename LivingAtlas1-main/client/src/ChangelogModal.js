@@ -16,6 +16,23 @@ function ChangelogModal({ isOpen, onClose }) {
 
             <div className="changelog-modal-body">
                 <>
+                        <h3>Update Date: 8/1 - 8/15/2026</h3>
+
+                        <h4>Card Linking – User-Uploaded Services</h4>
+                        <ul className="changelog-list">
+                          <li>Added a Link to Card option to the Service Info modal for user-uploaded services: it opens a Select Card dialog listing all cards with checkboxes, lets you link a service to one or more cards at once, and shows each linked card as a clickable link that opens that card's Learn More modal. Linked services appear in the card's Linked Custom Layers section, just like custom layers linked from the card itself.</li>
+                        </ul>
+
+                        <h4>Card Linking – Visibility Sync</h4>
+                        <ul className="changelog-list">
+                          <li>Kept the display state of user-uploaded services in sync between the Custom Layers panel and the Linked Custom Layers section of the Learn More modal: toggling a service's checkbox in either place now updates the other automatically, and the choice is saved to your account.</li>
+                        </ul>
+
+                        <h4>Coordinate Editing – Auto-Correction</h4>
+                        <ul className="changelog-list">
+                          <li>When editing a card's coordinates, if an uploaded service on the map contains a point (for example, the point included in an uploaded GeoJSON file), a bubble now appears at that point asking whether to auto-correct the card's coordinate to it. Accepting snaps the card into place, and the bubble is skipped whenever the card is already positioned correctly.</li>
+                        </ul>
+
                         <h3>Update Date: 7/15 - 7/30/2026</h3>
 
                         <h4>Custom Layers Panel</h4>
