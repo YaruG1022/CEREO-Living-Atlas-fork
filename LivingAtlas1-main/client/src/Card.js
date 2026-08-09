@@ -3241,6 +3241,7 @@ function Card(props) {
                     })()}
                     onSave={handleCoordinateEditSave}
                     onCancel={handleCoordinateEditCancel}
+                    enableServicePointAutoCorrect
                 />
             )}
             </div>

@@ -39,7 +39,7 @@ const normalizeHexColor = (value) => {
  *   move / rotate / scale all points, undo / redo, clear all.
  * Calls onSave(points) where points = [{ lat, lng, icon, color, opacity }].
  */
-function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
+function CoordinatesPanel({ initialPoints = [], onSave, onCancel, enableServicePointAutoCorrect = false }) {
     const [points, setPoints] = useState(() =>
         initialPoints.map(p => ({
             lat: p.lat,
@@ -175,6 +175,147 @@ function CoordinatesPanel({ initialPoints = [], onSave, onCancel }) {
             map.getCanvas().style.cursor = '';
         };
     }, [activeMode]);
+
+    // ── Service-embedded point detection & auto-correct bubble ──
+    // While editing a card's coordinate, if an uploaded geojson custom layer on
+    // the map contains a Point feature (e.g. data.geojson's "globalwatershedpoint"),
+    // show a bubble at that point offering to snap the card's coordinate to it.
+    // The bubble is hidden when the card point is already at the service point.
+    const SERVICE_POINT_TOLERANCE_DEG = 0.0005; // ~55 m — treat as "already in place"
+    const autoCorrectPopupRef = useRef(null);
+    const autoCorrectTargetRef = useRef(null); // current bubble target { lng, lat }
+    const autoCorrectDismissedRef = useRef(new Set()); // "lng,lat" keys the user dismissed
+
+    const closeAutoCorrectPopup = useCallback(() => {
+        if (autoCorrectPopupRef.current) {
+            try { autoCorrectPopupRef.current.remove(); } catch { /* ignore */ }
+            autoCorrectPopupRef.current = null;
+        }
+    }, []);
+
+    // Collect every Point feature from uploaded geojson sources currently on the map.
+    const findServicePoints = useCallback(() => {
+        const map = window.atlasMapInstance;
+        if (!map || !map.getStyle || !map.getStyle().sources) return [];
+        const style = map.getStyle();
+        const sourceIds = Object.keys(style.sources).filter(id => id.startsWith('uploaded-source-'));
+        const seen = new Set();
+        const pts = [];
+        sourceIds.forEach(sourceId => {
+            let features = [];
+            try { features = map.querySourceFeatures(sourceId) || []; } catch { /* ignore */ }
+            (Array.isArray(features) ? features : []).forEach(f => {
+                const g = f && f.geometry;
+                if (!g) return;
+                const coords = g.type === 'Point'
+                    ? [g.coordinates]
+                    : (g.type === 'MultiPoint' ? (g.coordinates || []) : []);
+                coords.forEach(([lng, lat]) => {
+                    if (typeof lng !== 'number' || typeof lat !== 'number') return;
+                    const key = `${round6(lng)},${round6(lat)}`;
+                    if (seen.has(key)) return;
+                    seen.add(key);
+                    pts.push({ lng, lat });
+                });
+            });
+        });
+        return pts;
+    }, []);
+
+    // Re-evaluate which service point (if any) is worth offering and keep the
+    // bubble in sync. Runs on mount, whenever the edited points change (so the
+    // bubble disappears once the coordinate lands on the point) and whenever the
+    // map finishes a move/render (sources may load slightly after the panel opens).
+    useEffect(() => {
+        if (!enableServicePointAutoCorrect) return undefined;
+        const map = window.atlasMapInstance;
+        if (!map) return undefined;
+
+        let timer = null;
+        const evaluate = () => {
+            const cardPts = (pointsRef.current || [])
+                .filter(p => !isNaN(parseFloat(p.lat)) && !isNaN(parseFloat(p.lng)))
+                .map(p => ({ lat: parseFloat(p.lat), lng: parseFloat(p.lng) }));
+
+            const servicePoints = findServicePoints();
+            // First service point that isn't already occupied by a card point and
+            // hasn't been dismissed by the user during this editing session.
+            const target = servicePoints.find(sp => {
+                const key = `${round6(sp.lng)},${round6(sp.lat)}`;
+                if (autoCorrectDismissedRef.current.has(key)) return false;
+                return !cardPts.some(cp => Math.hypot(cp.lng - sp.lng, cp.lat - sp.lat) <= SERVICE_POINT_TOLERANCE_DEG);
+            });
+
+            // Keep showing the current bubble (no flicker) if the target is unchanged.
+            if (target && autoCorrectTargetRef.current) {
+                const cur = autoCorrectTargetRef.current;
+                if (Math.abs(cur.lng - target.lng) < 1e-9 && Math.abs(cur.lat - target.lat) < 1e-9) return;
+            }
+
+            closeAutoCorrectPopup();
+            autoCorrectTargetRef.current = null;
+            if (!target) return;
+
+            const el = document.createElement('div');
+            el.className = 'coordinate-auto-correct-bubble';
+            el.innerHTML = `
+                <div class="coordinate-auto-correct-text">
+                    Detected service-embedded point.<br/>
+                    Auto-correct card coordinates to this point?
+                </div>
+                <div class="coordinate-auto-correct-actions">
+                    <button type="button" class="coordinate-auto-correct-btn yes">Yes</button>
+                    <button type="button" class="coordinate-auto-correct-btn no">No</button>
+                </div>
+            `;
+            el.querySelector('.yes').addEventListener('click', () => {
+                saveToHistoryRef.current?.();
+                setPoints(prev => {
+                    if (!Array.isArray(prev) || prev.length === 0) return prev;
+                    return prev.map((p, i) =>
+                        i === 0 ? { ...p, lat: round6(target.lat), lng: round6(target.lng) } : p
+                    );
+                });
+                closeAutoCorrectPopup();
+                autoCorrectTargetRef.current = null;
+            });
+            el.querySelector('.no').addEventListener('click', () => {
+                autoCorrectDismissedRef.current.add(`${round6(target.lng)},${round6(target.lat)}`);
+                closeAutoCorrectPopup();
+                autoCorrectTargetRef.current = null;
+            });
+
+            // Explicit Yes/No dialog — no built-in × or click-away close so the
+            // only ways to close it are the two buttons or the programmatic
+            // cleanup (which must not be mistaken for a user dismissal).
+            const popup = new mapboxgl.Popup({
+                closeButton: false,
+                closeOnClick: false,
+                closeOnMove: false,
+                offset: 20,
+                className: 'coordinate-auto-correct-popup',
+            })
+                .setLngLat([target.lng, target.lat])
+                .setDOMContent(el)
+                .addTo(map);
+            autoCorrectTargetRef.current = target;
+            autoCorrectPopupRef.current = popup;
+        };
+
+        const onIdle = () => {
+            window.clearTimeout(timer);
+            timer = window.setTimeout(evaluate, 120);
+        };
+        map.on('idle', onIdle);
+        timer = window.setTimeout(evaluate, 350); // initial check after panel opens
+
+        return () => {
+            map.off('idle', onIdle);
+            window.clearTimeout(timer);
+            closeAutoCorrectPopup();
+            autoCorrectTargetRef.current = null;
+        };
+    }, [points, findServicePoints, closeAutoCorrectPopup, enableServicePointAutoCorrect]);
 
     // Keep the on-map markers in sync with the points list and marker style.
     useEffect(() => {

@@ -484,7 +484,7 @@
     align-items: center;
     gap: 6px;
     padding: 6px 12px;
-    background: #27425d;
+    background: #1976d2;
     color: #fff;
     border: none;
     border-radius: 5px;
@@ -495,7 +495,7 @@
 }
 
 .service-info-linked-cards-link-btn:hover:not(:disabled) {
-    background: #1c3145;
+    background: #1565c0;
 }
 
 .service-info-linked-cards-link-btn:disabled {

@@ -2,6 +2,63 @@
    These rules only add the per-point icon picker and small layout tweaks so the
    icon button fits next to the lat/lng inputs. */
 
+/* Auto-correct bubble shown near a service-embedded point while editing a
+   card's coordinates (see CoordinatesPanel service-point detection). */
+.coordinate-auto-correct-popup .mapboxgl-popup-content {
+    padding: 0;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    overflow: hidden;
+}
+
+.coordinate-auto-correct-bubble {
+    min-width: 220px;
+    max-width: 260px;
+    padding: 12px 14px;
+    font-size: 13px;
+    color: #333;
+}
+
+.coordinate-auto-correct-text {
+    line-height: 1.4;
+    margin-bottom: 10px;
+}
+
+.coordinate-auto-correct-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.coordinate-auto-correct-btn {
+    padding: 6px 12px;
+    border-radius: 5px;
+    border: 1px solid transparent;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.coordinate-auto-correct-btn.yes {
+    background: #1976d2;
+    color: #fff;
+}
+
+.coordinate-auto-correct-btn.yes:hover {
+    background: #1565c0;
+}
+
+.coordinate-auto-correct-btn.no {
+    background: #fff;
+    color: #555;
+    border-color: #ccc;
+}
+
+.coordinate-auto-correct-btn.no:hover {
+    background: #f1f1f1;
+}
+
 /* Make room for the icon button by trimming the coordinate inputs slightly. */
 .coordinates-panel .polygon-draw-vertex-input {
     width: 58px;
