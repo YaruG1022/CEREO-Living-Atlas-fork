@@ -284,6 +284,29 @@ function Card(props) {
             .catch(err => console.warn('Failed to save custom layer visibility:', err));
     };
 
+    // Keep the Linked Custom Layers checkboxes in sync with the Custom Layers
+    // Panel's own service checkboxes (panel → learn-more direction). The panel
+    // persists the is_visible flag for every card link of the service itself.
+    useEffect(() => {
+        const handler = (e) => {
+            const { serviceKey, checked } = e.detail || {};
+            if (!serviceKey) return;
+            setLinkedCustomLayerChecked(prev => {
+                let changed = false;
+                const next = { ...prev };
+                linkedCustomLayerItems.forEach(item => {
+                    if (item.service_key === serviceKey && next[item.id] !== checked) {
+                        next[item.id] = checked;
+                        changed = true;
+                    }
+                });
+                return changed ? next : prev;
+            });
+        };
+        window.addEventListener('custom-layer-panel-toggle', handler);
+        return () => window.removeEventListener('custom-layer-panel-toggle', handler);
+    }, [linkedCustomLayerItems]);
+
     // Ensure username and name always have safe defaults
     // Now handled by handleEdit
     /* useEffect(() => {

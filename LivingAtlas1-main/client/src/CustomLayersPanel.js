@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { createPortal, unstable_batchedUpdates } from "react-dom";
+import api from './api';
 import { addArcgisVectorLayer } from './arcgisVectorUtils';
 import { addUploadedVectorLayer, removeUploadedVectorLayer, setUploadedVectorOpacity, uploadedSourceId } from './uploadedVectorUtils';
 import { showArcgisPopup } from './arcgisPopupUtils';
@@ -693,6 +694,34 @@ function CustomLayersPanel({
         window.addEventListener('custom-layer-toggle', handler);
         return () => window.removeEventListener('custom-layer-toggle', handler);
     }, []);
+
+    // Keep the card learn-more "Linked Custom Layers" checkboxes and the DB
+    // (is_visible) in sync with the panel's own service checkboxes. Only the
+    // uploaded custom services (the ones that can be linked to cards) are
+    // considered; the learn-more modal listens for 'custom-layer-panel-toggle'.
+    const prevServiceVisibleRef = useRef({});
+    useEffect(() => {
+        customServices
+            .filter(s => s.type === 'uploaded')
+            .forEach(service => {
+                const checked = (checkedLayerIds[service.key] || []).length > 0;
+                const prev = prevServiceVisibleRef.current[service.key];
+                if (prev === undefined) {
+                    // First observation — just record the state (e.g. on load).
+                    prevServiceVisibleRef.current[service.key] = checked;
+                    return;
+                }
+                if (prev === checked) return;
+                prevServiceVisibleRef.current[service.key] = checked;
+
+                window.dispatchEvent(new CustomEvent('custom-layer-panel-toggle', {
+                    detail: { serviceKey: service.key, checked },
+                }));
+                api.patch('/cardArcGISLinks/by-service', { service_key: service.key, is_visible: checked })
+                    .catch(err => console.warn('[CustomLayersPanel] Failed to sync custom layer visibility:', err));
+            });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [checkedLayerIds, customServices]);
 
     // Clear all layers from map:
     const handleClearAllLayers = () => {

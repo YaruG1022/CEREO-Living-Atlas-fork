@@ -150,6 +150,31 @@ class LinkVisibilityUpdate(BaseModel):
     is_visible: bool
 
 
+class LinkVisibilityByServiceUpdate(BaseModel):
+    service_key: str
+    is_visible: bool
+
+
+# Must be declared before the /cardArcGISLinks/{link_id} PATCH route, otherwise
+# Starlette would match "by-service" against {link_id} first.
+@card_arcgis_links_router.patch("/cardArcGISLinks/by-service")
+def update_card_arcgis_links_visibility_by_service(update: LinkVisibilityByServiceUpdate):
+    """Update is_visible for every card link matching a service_key. Used by the
+    Custom Layers Panel so toggling a service's checkbox on the panel keeps the
+    card learn-more "Linked Custom Layers" checkboxes and the DB in sync."""
+    try:
+        with conn.cursor() as c:
+            c.execute(
+                "UPDATE CardArcGISLinks SET is_visible = %s WHERE service_key = %s",
+                (update.is_visible, update.service_key),
+            )
+            conn.commit()
+        return {"success": True}
+    except Exception as e:
+        print(f"[CardArcGISLinks] PATCH by-service error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
 @card_arcgis_links_router.patch("/cardArcGISLinks/{link_id}")
 def update_card_arcgis_link_visibility(link_id: int, update: LinkVisibilityUpdate):
     try:

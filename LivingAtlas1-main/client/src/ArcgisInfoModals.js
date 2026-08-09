@@ -12,7 +12,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faFloppyDisk, faSquare, faDownload, faCircleCheck, faCaretDown, faLink, faUnlink } from '@fortawesome/free-solid-svg-icons';
+import { faFloppyDisk, faSquare, faDownload, faCircleCheck, faCaretDown, faLink } from '@fortawesome/free-solid-svg-icons';
 import shpwrite from '@mapbox/shp-write';
 import tokml from 'tokml';
 import api from './api';
@@ -396,50 +396,31 @@ export function ServiceInfoModal({
     const renderCardLinks = () => {
         if (!isUploadedCustom) return null;
         return (
-            <div className="arcgis-service-info-row" data-onboarding-target={`${onboardingPrefix}-service-info-card-links`}>
-                <strong>Linked Cards:</strong>
+            <div className="service-info-linked-cards" data-onboarding-target={`${onboardingPrefix}-service-info-card-links`}>
+                <div className="service-info-linked-cards-header">
+                    <span className="service-info-linked-cards-title">Linked Cards</span>
+                </div>
                 {linkedCards.length === 0 ? (
-                    <div className="arcgis-service-info-empty">No linked cards.</div>
+                    <div className="service-info-linked-cards-empty">No linked cards.</div>
                 ) : (
-                    <ul style={{ listStyle: 'none', margin: '6px 0 0', padding: 0 }}>
+                    <ul className="service-info-linked-cards-list">
                         {linkedCards.map(link => (
-                            <li key={link.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0' }}>
+                            <li key={link.id} className="service-info-linked-card-item">
                                 <button
                                     type="button"
+                                    className="service-info-linked-card-link"
                                     title={`Open "${link.card_title || 'card'}"`}
                                     onClick={() => handleOpenLinkedCard(link.card_id)}
-                                    style={{
-                                        color: '#1976d2',
-                                        textDecoration: 'underline',
-                                        background: 'none',
-                                        border: 'none',
-                                        cursor: 'pointer',
-                                        fontSize: '13px',
-                                        padding: 0,
-                                        textAlign: 'left',
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis',
-                                        whiteSpace: 'nowrap',
-                                        maxWidth: '280px',
-                                    }}
                                 >
                                     {link.card_title || `Card #${link.card_id}`}
                                 </button>
                                 <button
                                     type="button"
+                                    className="service-info-linked-card-remove"
                                     title="Remove link"
                                     onClick={() => handleUnlinkCard(link.id)}
-                                    style={{
-                                        background: 'none',
-                                        border: 'none',
-                                        cursor: 'pointer',
-                                        color: '#999',
-                                        padding: '2px 4px',
-                                        flexShrink: 0,
-                                        fontSize: '12px',
-                                    }}
                                 >
-                                    <FontAwesomeIcon icon={faUnlink} />
+                                    &times;
                                 </button>
                             </li>
                         ))}
@@ -447,13 +428,12 @@ export function ServiceInfoModal({
                 )}
                 <button
                     type="button"
-                    className="arcgis-service-info-save-btn"
+                    className="service-info-linked-cards-link-btn"
                     onClick={() => setIsSelectCardOpen(true)}
                     title="Link this service to one or more cards"
-                    style={{ ...SAVE_BTN_STYLE, marginTop: '8px' }}
                     disabled={isLinking}
                 >
-                    <FontAwesomeIcon icon={faLink} style={{ fontSize: '12px' }} />
+                    <FontAwesomeIcon icon={faLink} style={{ fontSize: '11px' }} />
                     {isLinking ? 'Linking…' : 'Link to Card'}
                 </button>
             </div>

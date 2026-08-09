@@ -385,6 +385,124 @@
     text-decoration: underline;
 }
 
+/* Service Info Modal — Linked Cards section (uploaded custom services) */
+.service-info-linked-cards {
+    margin-top: 10px;
+    padding: 10px 12px;
+    background: #f7f9fb;
+    border: 1px solid #e3e8ee;
+    border-radius: 6px;
+}
+
+.service-info-linked-cards-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.service-info-linked-cards-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: #27425d;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.service-info-linked-cards-list {
+    list-style: none;
+    margin: 0 0 8px;
+    padding: 0;
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.service-info-linked-card-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 2px;
+    border-bottom: 1px dashed #e0e6ee;
+}
+
+.service-info-linked-card-item:last-child {
+    border-bottom: none;
+}
+
+.service-info-linked-card-link {
+    flex: 1;
+    min-width: 0;
+    background: none;
+    border: none;
+    padding: 0;
+    text-align: left;
+    color: #1976d2;
+    font-size: 13px;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.service-info-linked-card-link:hover {
+    text-decoration: underline;
+}
+
+.service-info-linked-card-remove {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    color: #9aa4b2;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    transition: background 0.15s, color 0.15s;
+}
+
+.service-info-linked-card-remove:hover {
+    background: rgba(220, 38, 38, 0.12);
+    color: #dc2626;
+}
+
+.service-info-linked-cards-empty {
+    color: #888;
+    font-size: 12px;
+    font-style: italic;
+    padding: 2px 0 8px;
+}
+
+.service-info-linked-cards-link-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: #27425d;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.service-info-linked-cards-link-btn:hover:not(:disabled) {
+    background: #1c3145;
+}
+
+.service-info-linked-cards-link-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
 .custom-layers-panel.onboarding-locked * {
     pointer-events: none;
 }
