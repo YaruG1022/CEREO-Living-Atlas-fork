@@ -863,3 +863,7 @@ CLAUDE.md
 .claude/worktrees/amazing-cartwright-b1f772/
 documentation/chatbot_development_progress.md
 LivingAtlas1-main/chatbot_implementation_tasks.md
+documentation/card_images_403_diagnosis.md
+LivingAtlas1-main/backend/scripts/migration_manifest.csv
+LivingAtlas1-main/backend/scripts/migrate_gcs_to_azure.py
+LivingAtlas1-main/backend/scripts/migrate_gcs_to_azure.sql

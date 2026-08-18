@@ -11,7 +11,7 @@ from database import conn, cur
 from io import BytesIO
 from typing import Optional
 from fastapi.responses import FileResponse
-from google.cloud import storage
+# from google.cloud import storage   # (GCS legacy — storage moved to Azure Blob)
 import psycopg2
 import os
 import uuid
@@ -25,24 +25,20 @@ card_router = APIRouter()
 
 import os, base64
 
-# Decode the GCP credentials from the environment variable and write to file
-# COMMENT OUT IF RUNNING LOCALLY
-
-gcs_key = os.environ.get("GOOGLE_CREDENTIALS_BASE64")
-if gcs_key:
-    with open("ServiceKey_GoogleCloud.json", "wb") as f:
-        f.write(base64.b64decode(gcs_key))
-    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = "ServiceKey_GoogleCloud.json"
+# ---- OLD GCS setup (commented out — storage moved to Azure Blob) ----
+# gcs_key = os.environ.get("GOOGLE_CREDENTIALS_BASE64")
+# if gcs_key:
+#     with open("ServiceKey_GoogleCloud.json", "wb") as f:
+#         f.write(base64.b64decode(gcs_key))
+#     os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = "ServiceKey_GoogleCloud.json"
 # _______________________________________
+# storage_client = storage.Client()
+# bucket_name = "cereo_atlas_storage"
+# bucket = storage_client.bucket(bucket_name)
+# DEFAULT_THUMBNAIL_URL = "https://storage.googleapis.com/cereo_atlas_storage/thumbnails/default_cereo_thumbnail.png"
 
-# COMMENT OUT IF RUNNING ON RENDER
-#os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = "ServiceKey_GoogleCloud.json"
-# _______________________________________
-        
-storage_client = storage.Client()
-bucket_name = "cereo_atlas_storage"
-bucket = storage_client.bucket(bucket_name)
-DEFAULT_THUMBNAIL_URL = "https://storage.googleapis.com/cereo_atlas_storage/thumbnails/default_cereo_thumbnail.png"
+from . import azure_storage
+DEFAULT_THUMBNAIL_URL = azure_storage.build_url("thumbnails/default_cereo_thumbnail.png")
 
 
 def ensure_polygon_vertex_style_columns(cursor):
@@ -53,35 +49,28 @@ def ensure_polygon_vertex_style_columns(cursor):
           ADD COLUMN IF NOT EXISTS LineStyle VARCHAR(20)
     """)
 
-# Function to delete files from Google Cloud
+# Function to delete a blob from Azure Blob Storage (images container)
 def delete_from_bucket(blob_name):
     try:
-        bucket = storage_client.get_bucket(bucket_name)
-        blob = bucket.blob(blob_name)
-        blob.delete()
+        azure_storage.delete_blob(blob_name)
         print(f"File: {blob_name} deleted.")
     except Exception as e:
         print(e)
         return
 
-# Function to upload files to Google Cloud
+# Function to upload a local file to Azure Blob Storage (images container)
 def upload_to_bucket(destination_path, local_path, file_type, bucket_name):
     try:
-        # Always reopen the file to ensure readable stream
-        bucket = storage_client.bucket(bucket_name)
-        blob = bucket.blob(destination_path)
-
         with open(local_path, "rb") as f:
-            blob.upload_from_file(f, content_type=file_type)
-
-        
+            data = f.read()
+        azure_storage.upload_bytes(destination_path, data, file_type)
         print(f"[UPLOAD SUCCESS] {destination_path}")
         return True
     except Exception as e:
         print(f"[UPLOAD ERROR] {e}")
         return False
-    
-# Function to upload an image to Google Cloud Storage and return its URL
+
+# Function to upload a thumbnail image to Azure Blob Storage and return its URL
 def upload_image(file: Optional[UploadFile]) -> str:
     if not file:
         return DEFAULT_THUMBNAIL_URL
@@ -96,11 +85,10 @@ def upload_image(file: Optional[UploadFile]) -> str:
 
         # Generate unique filename
         unique_filename = f"{uuid.uuid4()}_{file.filename}"
-        blob = bucket.blob(f"thumbnails/{unique_filename}")
-        blob.upload_from_file(file.file, content_type=file.content_type)
-
-        public_url = f"https://storage.googleapis.com/{bucket_name}/thumbnails/{unique_filename}"
-        return public_url
+        data = file.file.read()
+        return azure_storage.upload_bytes(
+            f"thumbnails/{unique_filename}", data, file.content_type or "image/jpeg"
+        )
     except Exception as e:
         print(f"Thumbnail upload error: {e}")
         raise HTTPException(status_code=500, detail="Failed to upload thumbnail image.")
@@ -148,12 +136,11 @@ async def deleteCard(username: str, title: str, requester_email: str = None):
                 raise HTTPException(status_code=403, detail="You do not have permission to delete this card")
 
         if thumbnail_link and thumbnail_link != DEFAULT_THUMBNAIL_URL:
-            # Convert full URL to blob path by stripping bucket URL prefix:
+            # Delete the thumbnail blob from Azure
             try:
-                blob_path = thumbnail_link.replace(f"https://storage.googleapis.com/{bucket_name}/", "")
-                delete_from_bucket(blob_path)
+                azure_storage.delete_from_url(thumbnail_link)
             except Exception as e:
-                print(f"[WARN] Failed to parse/delete thumbnail: {e}")
+                print(f"[WARN] Failed to delete thumbnail from Azure: {e}")
         
         # Delete file in cloud service
         cur.execute("""
@@ -164,10 +151,9 @@ async def deleteCard(username: str, title: str, requester_email: str = None):
         file_link = cur.fetchone()
         if file_link:
             try:
-                blob_path = file_link[0].replace(f"https://storage.googleapis.com/{bucket_name}/", "")
-                delete_from_bucket(blob_path)
+                azure_storage.delete_from_url(file_link[0])
             except Exception as e:
-                print(f"[WARN] Failed to parse/delete file: {e}")
+                print(f"[WARN] Failed to delete file from Azure: {e}")
 
         cur.execute("DELETE FROM Favorites WHERE CardID = %s", (cardID,))
         cur.execute("DELETE FROM Files WHERE CardID = %s", (cardID,))
@@ -186,7 +172,7 @@ async def deleteCard(username: str, title: str, requester_email: str = None):
 @card_router.delete("/deleteFile")
 async def delete_file(fileID: int):
     """
-    Deletes a file from both the database and Google Cloud Storage.
+    Deletes a file from both the database and Azure Blob Storage.
     """
     try:
         # Get file info
@@ -196,14 +182,13 @@ async def delete_file(fileID: int):
             raise HTTPException(status_code=404, detail="File not found")
 
         file_link = result[0]
-        blob_path = file_link.replace(f"https://storage.googleapis.com/{bucket_name}/", "")
 
-        # Delete from GCS
+        # Delete from Azure Blob
         try:
-            delete_from_bucket(blob_path)
-            print(f"[FILE DELETE] Deleted from GCS: {blob_path}")
+            azure_storage.delete_from_url(file_link)
+            print(f"[FILE DELETE] Deleted from Azure: {file_link}")
         except Exception as e:
-            print(f"[WARN] Could not delete from GCS: {e}")
+            print(f"[WARN] Could not delete from Azure: {e}")
 
         # Delete from DB
         cur.execute("DELETE FROM Files WHERE fileid = %s", (fileID,))
@@ -847,11 +832,11 @@ async def upload_form(
                     destination_path = f"files/{username}/{safe_filename}.zip"
 
                     print(f"[UPLOAD] Uploading compressed file {zip_filename} → {destination_path}")
-                    upload_ok = upload_to_bucket(destination_path, zip_path, "application/zip", bucket_name)
+                    upload_ok = upload_to_bucket(destination_path, zip_path, "application/zip", azure_storage.AZURE_CONTAINER)
                     if not upload_ok:
-                        raise Exception("Upload to GCS failed")
+                        raise Exception("Upload to Azure failed")
 
-                    public_url = f"https://storage.googleapis.com/{bucket_name}/{destination_path}"
+                    public_url = azure_storage.build_url(destination_path)
 
                     cur.execute(
                         'INSERT INTO Files (fileid, CardID, filename, file_link, filesize, fileextension) '
