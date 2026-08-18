@@ -36,6 +36,11 @@ function ChangelogHistory() {
 
                         <h4>Coordinate Editing – Auto-Correction</h4>
                         <p>When editing a card's coordinates, if an uploaded service on the map contains a point (for example, the point included in an uploaded GeoJSON file), a bubble now appears at that point asking whether to auto-correct the card's coordinate to it. Accepting snaps the card into place, and the bubble is skipped whenever the card is already positioned correctly.</p>
+
+                        <h4>Image Storage Migration to Azure</h4>
+                        <p>Migrated the storage of all card images and thumbnails from Google Cloud Storage to Azure Blob Storage: the full image library (card gallery images, thumbnails, and the default image) was copied to the Azure storage account, and every image URL in the database was rewritten to point to the new Azure locations.</p>
+                        <p>The backend's image and thumbnail upload and delete logic now uses the Azure Blob SDK, so any images uploaded after the migration are stored directly on Azure.</p>
+                        <p>This also fixed the issue where card images failed to load in the app and fell back to the default image.</p>
                         <hr />
 
                         <h3>Update Date: 7/15 - 7/30/2026</h3>
