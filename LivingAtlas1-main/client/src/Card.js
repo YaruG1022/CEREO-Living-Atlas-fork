@@ -9,6 +9,8 @@ import { faHeart as solidHeart, faMagnifyingGlass, faPenToSquare, faTrashCan, fa
 import { jsPDF } from 'jspdf';
 import { faHeart as regularHeart, faQuestionCircle, faCirclePlay } from '@fortawesome/free-regular-svg-icons';
 import { fetchUserPreferences } from './userPreferencesApi';
+import RichTextEditor from './RichTextEditor';
+import { sanitizeHtml, htmlToPlainText } from './richTextUtils';
 import PolygonDrawingModal from './PolygonDrawingModal';
 import CoordinatesPanel from './CoordinatesPanel';
 import ArcGISPickerModal from './ArcGISPickerModal';
@@ -546,7 +548,7 @@ function Card(props) {
             y += 6;
             addDivider();
             addText('Description', { fontSize: 13, bold: true });
-            addText(formData.description, { fontSize: 11 });
+            addText(htmlToPlainText(formData.description), { fontSize: 11 });
         }
 
         // Links
@@ -2374,7 +2376,12 @@ function Card(props) {
                             </button>
 
                             <p><strong>Description:</strong></p>
-                            <textarea className="learn-more-inline-textarea" name="description" value={formData.description || ''} onChange={handleInputChange} />
+                            <RichTextEditor
+                                value={formData.description || ''}
+                                onChange={(html) => setFormData(prev => ({ ...prev, description: html }))}
+                                placeholder="Enter description..."
+                                minHeight={110}
+                            />
 
                             <p><strong>Tags:</strong></p>
                             <input className="learn-more-inline-input" type="text" name="tags" value={formData.tags || ''} onChange={handleInputChange} />
@@ -2466,7 +2473,7 @@ function Card(props) {
                                     );
                                 })()}
                             </div>
-                            <p className="learn-more-modal-description"><strong>Description:</strong> {formData.description}</p>
+                            <p className="learn-more-modal-description"><strong>Description:</strong> <span dangerouslySetInnerHTML={{ __html: sanitizeHtml(formData.description) }} /></p>
                             <p><strong>Tags:</strong> {formData.tags}</p>
                             <p><strong>Visibility:</strong> {formData.is_public !== false ? 'Public' : 'Private (only visible to you)'}</p>
                         </>
@@ -2910,10 +2917,11 @@ function Card(props) {
                     </label>
                     <label>
                         Description:
-                        <textarea
-                            name="description"
+                        <RichTextEditor
                             value={formData.description || ""}
-                            onChange={handleInputChange}
+                            onChange={(html) => setFormData(prev => ({ ...prev, description: html }))}
+                            placeholder="Enter description..."
+                            minHeight={110}
                         />
                     </label>
                     <label>

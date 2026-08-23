@@ -3,6 +3,8 @@ import ReactDOM from 'react-dom';
 import Modal from 'react-modal';
 import './FormModal.css';
 import api from './api.js';
+import RichTextEditor from './RichTextEditor';
+import { htmlToPlainText } from './richTextUtils';
 import PolygonDrawingModal from './PolygonDrawingModal';
 import CoordinatesPanel from './CoordinatesPanel';
 import ArcGISPickerModal from './ArcGISPickerModal';
@@ -265,7 +267,7 @@ const FormModal = (props) => {
                 if (!/^(-?\d+(\.\d{1,8})?)$/.test(formData.longitude)) errors.push("Longitude format is invalid.");
             }
         }
-        if (formData.description && formData.description.length > 2000) errors.push("Description must be <2001 chars.");
+        if (formData.description && htmlToPlainText(formData.description).length > 2000) errors.push("Description must be <2001 chars.");
         if (formData.org && formData.org.length > 255) errors.push("Org must be <256 chars.");
         if (formData.funding && formData.funding.length > 255) errors.push("Funding must be <256 chars.");
         const serializedLink = serializeLinks(links);
@@ -622,7 +624,12 @@ const FormModal = (props) => {
                     </select>
 
                     <label>Description (optional):</label>
-                    <textarea name="description" value={formData.description} onChange={handleInputChange} />
+                    <RichTextEditor
+                        value={formData.description || ''}
+                        onChange={(html) => setFormData(prev => ({ ...prev, description: html }))}
+                        placeholder="Enter description..."
+                        minHeight={110}
+                    />
 
                     <label>Funding (optional):</label>
                     <input type="text" name="funding" value={formData.funding} onChange={handleInputChange} />
