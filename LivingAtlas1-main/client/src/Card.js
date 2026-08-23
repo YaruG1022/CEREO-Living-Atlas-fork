@@ -76,6 +76,16 @@ function serializeLinks(links) {
     return JSON.stringify(filtered);
 }
 
+// Tags are stored as a comma-separated string (e.g. "river, watershed").
+function parseTags(tags) {
+    if (!tags) return [];
+    return String(tags).split(',').map(t => t.trim()).filter(Boolean);
+}
+
+function serializeTags(tagArray) {
+    return (tagArray || []).join(', ');
+}
+
 function Card(props) {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isLearnMoreOnboardingOpen, setIsLearnMoreOnboardingOpen] = useState(false);
@@ -127,6 +137,7 @@ function Card(props) {
     const linkedCustomLayerItemsBackupRef = useRef(null);
     const [learnMoreLinks, setLearnMoreLinks] = useState([{ url: '', text: '' }]);
     const [editFormLinks, setEditFormLinks] = useState([{ url: '', text: '' }]);
+    const [tagInput, setTagInput] = useState('');
     const [thumbnail, setThumbnail] = useState(null);
     const [preview, setPreview] = useState(
         formData.thumbnail_link && formData.thumbnail_link.trim() !== ""
@@ -1498,7 +1509,7 @@ function Card(props) {
 
         // Compare tracked formData fields
         const trackedFields = [
-            'title', 'description', 'category', 'username', 'name',
+            'title', 'description', 'tags', 'category', 'username', 'name',
             'latitude', 'longitude', 'location_type',
             'polygon_vertices', 'polygon_fill_color', 'polygon_line_style', 'polygon_fill_opacity',
             'website_link', 'thumbnail_link', 'files',
@@ -1557,6 +1568,36 @@ function Card(props) {
             ...prev,
             [name]: value,
         }));
+    };
+
+    const addTag = (raw) => {
+        const tag = String(raw || '').trim();
+        if (!tag) return;
+        setFormData((prev) => {
+            const existing = parseTags(prev.tags);
+            if (existing.some((t) => t.toLowerCase() === tag.toLowerCase())) return prev;
+            return { ...prev, tags: serializeTags([...existing, tag]) };
+        });
+    };
+
+    const removeTag = (tagToRemove) => {
+        setFormData((prev) => ({
+            ...prev,
+            tags: serializeTags(parseTags(prev.tags).filter((t) => t !== tagToRemove)),
+        }));
+    };
+
+    const handleTagInputChange = (e) => setTagInput(e.target.value);
+
+    const handleTagKeyDown = (e) => {
+        if (e.key === 'Enter' || e.key === ',') {
+            e.preventDefault();
+            addTag(tagInput);
+            setTagInput('');
+        } else if (e.key === 'Backspace' && !tagInput) {
+            const tags = parseTags(formData.tags);
+            if (tags.length > 0) removeTag(tags[tags.length - 1]);
+        }
     };
 
     const handleImageChange = (e) => {
@@ -2384,7 +2425,30 @@ function Card(props) {
                             />
 
                             <p><strong>Tags:</strong></p>
-                            <input className="learn-more-inline-input" type="text" name="tags" value={formData.tags || ''} onChange={handleInputChange} />
+                            <div className="learn-more-tags-editor">
+                                {parseTags(formData.tags).map((tag, idx) => (
+                                    <span key={`${tag}-${idx}`} className="learn-more-tag-chip">
+                                        {tag}
+                                        <button
+                                            type="button"
+                                            className="learn-more-tag-chip-remove"
+                                            aria-label={`Remove tag ${tag}`}
+                                            title="Remove tag"
+                                            onClick={() => removeTag(tag)}
+                                        >
+                                            ×
+                                        </button>
+                                    </span>
+                                ))}
+                                <input
+                                    className="learn-more-tag-input"
+                                    type="text"
+                                    value={tagInput}
+                                    placeholder={parseTags(formData.tags).length === 0 ? 'Add a tag and press Enter' : 'Add another tag'}
+                                    onChange={handleTagInputChange}
+                                    onKeyDown={handleTagKeyDown}
+                                />
+                            </div>
 
                             <p><strong>Visibility:</strong></p>
                             <select
@@ -2474,7 +2538,15 @@ function Card(props) {
                                 })()}
                             </div>
                             <div className="learn-more-modal-description"><strong>Description:</strong> <span dangerouslySetInnerHTML={{ __html: descriptionToHtml(formData.description) }} /></div>
-                            <p><strong>Tags:</strong> {formData.tags}</p>
+                            <p><strong>Tags:</strong>{parseTags(formData.tags).length > 0 ? (
+                                <span className="learn-more-tags-chips">
+                                    {parseTags(formData.tags).map((tag, idx) => (
+                                        <span key={`${tag}-${idx}`} className="learn-more-tag-chip learn-more-tag-chip-readonly">{tag}</span>
+                                    ))}
+                                </span>
+                            ) : (
+                                ' N/A'
+                            )}</p>
                             <p><strong>Visibility:</strong> {formData.is_public !== false ? 'Public' : 'Private (only visible to you)'}</p>
                         </>
                     )}

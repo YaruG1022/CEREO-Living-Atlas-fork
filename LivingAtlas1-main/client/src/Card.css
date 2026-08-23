@@ -1489,6 +1489,81 @@
   color: inherit;
 }
 
+/* Tag chips (edit + read-only view) */
+.learn-more-tags-editor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  margin: 0 0 12px;
+  box-sizing: border-box;
+}
+
+.learn-more-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px 3px 10px;
+  background: #eef2ff;
+  color: #3730a3;
+  border: 1px solid #c7d2fe;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.learn-more-tag-chip-readonly {
+  padding: 3px 10px;
+}
+
+.learn-more-tags-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Tiny remove button — override the generic .Modal button styles */
+.learn-more-tag-chip-remove {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 16px !important;
+  height: 16px !important;
+  min-width: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  border-radius: 50% !important;
+  background: transparent !important;
+  color: #4f46e5 !important;
+  font-size: 0.8rem !important;
+  line-height: 1 !important;
+  cursor: pointer;
+}
+
+.learn-more-tag-chip-remove:hover {
+  background: #c7d2fe !important;
+  color: #1e1b4b !important;
+}
+
+.learn-more-modal-body .learn-more-tags-editor .learn-more-tag-input {
+  flex: 1;
+  min-width: 130px;
+  border: none;
+  outline: none;
+  padding: 3px 4px;
+  font-size: 0.9rem;
+  color: #1f2937;
+  background: transparent;
+  box-shadow: none;
+  margin: 0;
+}
+
 .learn-more-file-list {
   margin-top: 16px;
   padding-top: 16px;
