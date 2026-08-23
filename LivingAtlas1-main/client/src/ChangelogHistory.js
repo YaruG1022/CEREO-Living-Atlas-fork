@@ -26,6 +26,21 @@ function ChangelogHistory() {
             <div className="changelog-history-body">
                 {activeTab === 'latest' && (
                     <>
+                        <h3>Update Date: 8/15 - 8/30/2026</h3>
+
+                        <h4>Rich Text Descriptions</h4>
+                        <p>Added Word-style rich text editing to the card's Description field in edit mode, powered by the TipTap editor. The new toolbar supports bold, italic, underline, strikethrough, bulleted and numbered lists, undo/redo, and a heading dropdown with Paragraph and Heading 1–6 options. Descriptions are now stored as formatted HTML, shown with their formatting in the Learn More modal, and converted to plain text for PDF export. Pasting multi-line text now keeps it in a single paragraph instead of splitting it into separate lines.</p>
+
+                        <h4>Tags</h4>
+                        <p>Improved the tag display in the Learn More modal: each tag is now a small pill with its own remove button, and an inline input lets you add tags by pressing Enter or a comma. The small text at the bottom of each card in the card container now shows the card's tags (with an ellipsis when they overflow) instead of its category.</p>
+
+                        <h4>Card Representation</h4>
+                        <p>Added a new Representation section to the Learn More modal that previews how a card is represented — as a point, multiple points, a polygon, or an image overlay — and moved the Edit Coordinate / Edit Polygon / Edit Image and Change Location Type buttons into it. The preview is visible in both view and edit modes, while the buttons appear only when editing.</p>
+
+                        <h4>Bug Fixes</h4>
+                        <p>Fixed an issue where changing a card's title in edit mode and saving had no effect — the new title wasn't being written to the database. Titles now save correctly.</p>
+                        <hr />
+
                         <h3>Update Date: 8/1 - 8/15/2026</h3>
 
                         <h4>Card Linking – User-Uploaded Services</h4>
