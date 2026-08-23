@@ -1993,7 +1993,7 @@ function Card(props) {
                 <h2 className="card-title">{displayCardData.title}</h2>
             </div>
             <div className="card-meta-row">
-                <p className="card-meta">{displayCardData.category || "Uncategorized"}</p>
+                <p className="card-meta">{parseTags(displayCardData.tags).join(', ') || "No tags"}</p>
                 <button
                     className="card-meta-zoom-btn"
                     data-onboarding-target={props.onboardingTargetPrefix ? `${props.onboardingTargetPrefix}-actions` : undefined}
