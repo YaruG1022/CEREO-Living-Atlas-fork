@@ -5,7 +5,7 @@ import api from './api.js';
 import { fetchArcgisLegend } from './arcgisDataUtils';
 import './Card.css';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faHeart as solidHeart, faMagnifyingGlass, faPenToSquare, faTrashCan, faDownload } from '@fortawesome/free-solid-svg-icons';
+import { faHeart as solidHeart, faMagnifyingGlass, faPenToSquare, faTrashCan, faDownload, faLocationDot, faDrawPolygon } from '@fortawesome/free-solid-svg-icons';
 import { jsPDF } from 'jspdf';
 import { faHeart as regularHeart, faQuestionCircle, faCirclePlay } from '@fortawesome/free-regular-svg-icons';
 import { fetchUserPreferences } from './userPreferencesApi';
@@ -1776,6 +1776,41 @@ function Card(props) {
             ? resolveImageUrl(displayCardData.thumbnail_link)
             : "/CEREO-logo.png";
 
+    // Shared representation preview (icon/thumbnail + type + detail) shown in both
+    // edit and view modes. The edit/change buttons are only rendered in edit mode.
+    const renderRepresentationPreview = () => (
+        <>
+            <p><strong>Representation:</strong></p>
+            <div className="learn-more-representation-preview">
+                {isImageCard ? (
+                    <img
+                        className="learn-more-representation-thumb"
+                        src={cardThumbnailSrc}
+                        alt="Card representation preview"
+                    />
+                ) : (
+                    <div className="learn-more-representation-icon">
+                        <FontAwesomeIcon icon={isOverlayCard ? faDrawPolygon : faLocationDot} />
+                    </div>
+                )}
+                <div className="learn-more-representation-info">
+                    <span className="learn-more-representation-type">
+                        {isImageCard ? 'Image' : isPolygonCard ? 'Polygon' : (formData.location_type === 'multipoint' ? 'Multi-point' : 'Point')}
+                    </span>
+                    <span className="learn-more-representation-detail">
+                        {isImageCard
+                            ? 'Image overlay'
+                            : isPolygonCard
+                            ? `${(formData.polygon_vertices || []).length} vertices`
+                            : formData.location_type === 'multipoint'
+                            ? `${(formData.polygon_vertices || []).length} points`
+                            : `${formData.latitude ?? ''}, ${formData.longitude ?? ''}`}
+                    </span>
+                </div>
+            </div>
+        </>
+    );
+
     const cardImageList = isImageCard
         ? [{ url: cardThumbnailSrc, id: 'card-representation', imageID: null, alt: 'Card representation' }]
         : displayCardData.images && Array.isArray(displayCardData.images) && displayCardData.images.length > 0
@@ -2459,48 +2494,51 @@ function Card(props) {
                                 <option value="true">Public (visible to everyone)</option>
                                 <option value="false">Private (only visible to me)</option>
                             </select>
-                            <div data-onboarding-target="learn-more-coordinates-polygon">
-                                {isOverlayCard ? (
-                                    <button type="button" className="learn-more-select-location-btn" onClick={handleEditPolygon}>
-                                        {isImageCard ? 'Edit Image' : 'Edit Polygon'}
-                                    </button>
-                                ) : (
-                                    <div className="learn-more-location-btn-group">
-                                        <button type="button" className="learn-more-select-location-btn" onClick={handleEditCoordinate}>
-                                            Edit Coordinate
+                            <div className="learn-more-location-section" data-onboarding-target="learn-more-coordinates-polygon">
+                                {renderRepresentationPreview()}
+                                <div className="learn-more-location-actions">
+                                    {isOverlayCard ? (
+                                        <button type="button" className="learn-more-select-location-btn" onClick={handleEditPolygon}>
+                                            {isImageCard ? 'Edit Image' : 'Edit Polygon'}
                                         </button>
-                                        <div className="learn-more-location-type-btn-wrap" ref={locationTypeMenuRef}>
-                                            <button
-                                                type="button"
-                                                className="learn-more-select-location-btn learn-more-change-to-polygon-btn"
-                                                onClick={() => setIsLocationTypeMenuOpen(v => !v)}
-                                            >
-                                                Change location type
+                                    ) : (
+                                        <div className="learn-more-location-btn-group">
+                                            <button type="button" className="learn-more-select-location-btn" onClick={handleEditCoordinate}>
+                                                Edit Coordinate
                                             </button>
-                                            {isLocationTypeMenuOpen && (
-                                                <div className="learn-more-location-type-menu">
-                                                    <button type="button" className="learn-more-location-type-menu-item active" disabled>
-                                                        Point
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        className="learn-more-location-type-menu-item"
-                                                        onClick={() => { setIsLocationTypeMenuOpen(false); handleChangeToPolygon(); }}
-                                                    >
-                                                        Polygon
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        className="learn-more-location-type-menu-item"
-                                                        onClick={() => { setIsLocationTypeMenuOpen(false); handleChangeToImage(); }}
-                                                    >
-                                                        Image
-                                                    </button>
-                                                </div>
-                                            )}
+                                            <div className="learn-more-location-type-btn-wrap" ref={locationTypeMenuRef}>
+                                                <button
+                                                    type="button"
+                                                    className="learn-more-select-location-btn learn-more-change-to-polygon-btn"
+                                                    onClick={() => setIsLocationTypeMenuOpen(v => !v)}
+                                                >
+                                                    Change location type
+                                                </button>
+                                                {isLocationTypeMenuOpen && (
+                                                    <div className="learn-more-location-type-menu">
+                                                        <button type="button" className="learn-more-location-type-menu-item active" disabled>
+                                                            Point
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            className="learn-more-location-type-menu-item"
+                                                            onClick={() => { setIsLocationTypeMenuOpen(false); handleChangeToPolygon(); }}
+                                                        >
+                                                            Polygon
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            className="learn-more-location-type-menu-item"
+                                                            onClick={() => { setIsLocationTypeMenuOpen(false); handleChangeToImage(); }}
+                                                        >
+                                                            Image
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
-                                    </div>
-                                )}
+                                    )}
+                                </div>
                             </div>
                         </>
                     ) : (
@@ -2518,6 +2556,9 @@ function Card(props) {
                                         <strong>Longitude:</strong> {formData.longitude}
                                     </p>
                                 )}
+                            </div>
+                            <div className="learn-more-location-section">
+                                {renderRepresentationPreview()}
                             </div>
                             <div className="learn-more-links-view">
                                 <strong>Links:</strong>
