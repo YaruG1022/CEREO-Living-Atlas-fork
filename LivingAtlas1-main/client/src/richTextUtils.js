@@ -13,6 +13,17 @@ export function sanitizeHtml(html) {
     });
 }
 
+// Display-ready HTML for a card description. Legacy descriptions are plain
+// text — preserve their line breaks (formerly handled by white-space: pre-wrap).
+export function descriptionToHtml(value) {
+    if (!value) return '';
+    const str = String(value);
+    if (!/<[a-z][\s\S]*>/i.test(str)) {
+        return sanitizeHtml(str).replace(/\r\n?|\n/g, '<br>');
+    }
+    return sanitizeHtml(str);
+}
+
 // Convert rich-text HTML to plain text. Used for the PDF export (jsPDF cannot
 // render HTML) and for character-count validation.
 export function htmlToPlainText(html) {

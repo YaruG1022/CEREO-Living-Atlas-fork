@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
+import { Fragment, Slice } from '@tiptap/pm/model';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -58,6 +59,22 @@ function RichTextEditor({ value, onChange, placeholder, id, className, minHeight
             attributes: {
                 class: 'rich-text-editor-content',
                 ...(minHeight ? { style: `min-height:${minHeight}px;` } : {}),
+            },
+            // Pasted plain text with line breaks becomes soft line breaks (<br>)
+            // within ONE paragraph, instead of TipTap's default of splitting each
+            // line into a separate <p>. Without this, pasting multi-line text
+            // produces separate paragraphs (and empty paragraphs for blank lines),
+            // which is what makes text look "split into its own lines", hard to
+            // merge, and with inconsistent paragraph spacing.
+            clipboardTextParser: (text, $context, plainText, view) => {
+                const { schema } = view.state;
+                const marks = $context.marks();
+                const nodes = [];
+                text.split(/\r\n?|\n/).forEach((line, i) => {
+                    if (i > 0) nodes.push(schema.nodes.hardBreak.create());
+                    if (line) nodes.push(schema.text(line, marks));
+                });
+                return new Slice(Fragment.fromArray(nodes), 0, 0);
             },
         },
     });

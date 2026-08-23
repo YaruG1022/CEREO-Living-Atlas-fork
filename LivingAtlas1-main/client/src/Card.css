@@ -1461,9 +1461,32 @@
   font-size: 0.95rem;
   line-height: 1.6;
   color: #374151;
-  white-space: pre-wrap;
   word-break: break-word;
   margin: 0 0 12px !important;
+}
+
+/* Field label ("Description:") keeps the block style it had as p > strong */
+.learn-more-modal-description > strong {
+  color: #1f2937;
+  font-weight: 600;
+  display: block;
+  margin-bottom: 4px;
+}
+
+/* Rich-text description content: user bold must stay inline, not block */
+.learn-more-modal-description span p {
+  margin: 0 0 0.5em;
+}
+
+.learn-more-modal-description span p:last-child {
+  margin-bottom: 0;
+}
+
+.learn-more-modal-description span strong {
+  display: inline;
+  margin: 0;
+  font-weight: 700;
+  color: inherit;
 }
 
 .learn-more-file-list {

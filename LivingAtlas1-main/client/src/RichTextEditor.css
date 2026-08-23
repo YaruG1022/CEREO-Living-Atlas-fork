@@ -95,6 +95,15 @@
   text-decoration: underline;
 }
 
+/* Guard against ancestor styles (e.g. .learn-more-modal-body p strong { display: block })
+   leaking into user content inside the editor */
+.rich-text-editor .rich-text-editor-content strong {
+  display: inline;
+  margin: 0;
+  font-weight: 700;
+  color: inherit;
+}
+
 .rich-text-editor .rich-text-editor-content:focus-within {
   border-color: #93c5fd;
 }

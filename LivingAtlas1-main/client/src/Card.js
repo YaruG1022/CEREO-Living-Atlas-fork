@@ -10,7 +10,7 @@ import { jsPDF } from 'jspdf';
 import { faHeart as regularHeart, faQuestionCircle, faCirclePlay } from '@fortawesome/free-regular-svg-icons';
 import { fetchUserPreferences } from './userPreferencesApi';
 import RichTextEditor from './RichTextEditor';
-import { sanitizeHtml, htmlToPlainText } from './richTextUtils';
+import { descriptionToHtml, htmlToPlainText } from './richTextUtils';
 import PolygonDrawingModal from './PolygonDrawingModal';
 import CoordinatesPanel from './CoordinatesPanel';
 import ArcGISPickerModal from './ArcGISPickerModal';
@@ -2473,7 +2473,7 @@ function Card(props) {
                                     );
                                 })()}
                             </div>
-                            <p className="learn-more-modal-description"><strong>Description:</strong> <span dangerouslySetInnerHTML={{ __html: sanitizeHtml(formData.description) }} /></p>
+                            <div className="learn-more-modal-description"><strong>Description:</strong> <span dangerouslySetInnerHTML={{ __html: descriptionToHtml(formData.description) }} /></div>
                             <p><strong>Tags:</strong> {formData.tags}</p>
                             <p><strong>Visibility:</strong> {formData.is_public !== false ? 'Public' : 'Private (only visible to you)'}</p>
                         </>
