@@ -629,13 +629,13 @@ async def upload_form(
 
             cur.execute("""
                 UPDATE Cards
-                SET Name=%s, Latitude=%s, Longitude=%s, CategoryID=%s,
+                SET Name=%s, Title=%s, Latitude=%s, Longitude=%s, CategoryID=%s,
                     Description=%s, Organization=%s, Funding=%s, Link=%s, LinkText=%s,
                     Thumbnail_Link=COALESCE(%s, Thumbnail_Link), UserID=%s,
                     LocationType=%s, PolygonFillColor=%s, PolygonLineStyle=%s,
                     is_public=%s
                 WHERE CardID=%s
-            """, (name, latitude_val, longitude_val, categoryID, description, org,
+            """, (name, title, latitude_val, longitude_val, categoryID, description, org,
                   funding, link, link_text, thumbnail_url, userID, location_type or "point",
                   polygon_fill_color or '#0077c0', polygon_line_style or 'solid',
                   (is_public or 'true').lower() != 'false', nextcardid))
