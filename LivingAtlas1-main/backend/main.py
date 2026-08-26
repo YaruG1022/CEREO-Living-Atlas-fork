@@ -43,8 +43,6 @@ from endpoint_files import filterbar_router
 from endpoint_files import map_router
 from endpoint_files import arcgis_router
 from endpoint_files import images_router
-from endpoint_files.chat import chat_router
-from endpoint_files.chat_pinecone_hosted import chat_pinecone_hosted_router
 from endpoint_files.cards_summary import cards_summary_router
 
 
@@ -108,8 +106,6 @@ app.include_router(filterbar_router)
 app.include_router(map_router)
 app.include_router(arcgis_router)
 app.include_router(images_router)
-app.include_router(chat_router)
-app.include_router(chat_pinecone_hosted_router)
 app.include_router(cards_summary_router)
 
 os.makedirs("uploads", exist_ok=True)

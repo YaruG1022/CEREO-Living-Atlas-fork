@@ -47,9 +47,6 @@ python-dotenv==1.0.0
 python-multipart==0.0.6
 pytz==2022.2.1
 requests==2.31.0
-openai>=1.30.0
-fastembed>=0.3.6
-pinecone>=9.0.0
 resend
 rsa==4.9
 sendgrid==6.10.0
