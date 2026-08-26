@@ -1,10 +1,11 @@
 """
 chat_pinecone_hosted.py  —  /chat-pinecone/ask endpoint (Pinecone hosted embeddings)
 
-Drop-in replacement for chat_pinecone.py that uses Pinecone's integrated
-inference: the query text is sent as-is and embedded server-side by the model
-attached to the index, so no local embedding model (fastembed) is needed.
-Generation: DeepSeek API (same as chat.py / chat_pinecone.py).
+Feature-parity replacement for chat.py that uses Pinecone's integrated
+inference for docs retrieval: the query text is sent as-is and embedded
+server-side by the model attached to the index, so no local embedding model
+(fastembed) is needed. Card context and chat-agent skills are the same as
+chat.py. Generation: DeepSeek API (same as chat.py).
 
 Required env vars:
   PINECONE_API_KEY       — your Pinecone API key
@@ -22,25 +23,13 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from openai import APIConnectionError, APITimeoutError, OpenAI
 
+from endpoint_files.chat import SYSTEM_PROMPT_BASE, get_card_context
+from endpoint_files.chat_agent import build_default_chat_agent
+
 chat_pinecone_hosted_router = APIRouter(prefix="/chat-pinecone", tags=["chat-pinecone-hosted"])
 
 NAMESPACE = "__default__"
-
-# ---------------------------------------------------------------------------
-# System prompt (identical to chat.py / chat_pinecone.py)
-# ---------------------------------------------------------------------------
-SYSTEM_PROMPT_BASE = """You are the RWC Living Atlas Helper, an AI assistant for the
-Regional Water Center (RWC) Living Atlas web application — an interactive map
-that showcases environmental datasets, GIS layers, and research resources for
-the Pacific Northwest (Idaho, Oregon, and Washington).
-
-Answer the user's question using the reference documentation provided below.
-If the documentation does not cover the question, say so honestly — do not invent information.
-Be concise, friendly, and factual.
-Do not answer questions unrelated to the Living Atlas or environmental/GIS topics.
-
-⚠️ This feature is under development. Always verify critical information with the original data source.
-"""
+_CHAT_AGENT = build_default_chat_agent()
 
 
 # ---------------------------------------------------------------------------
@@ -116,13 +105,24 @@ def ask(payload: ChatRequest):
             detail="Chatbot is not configured (missing DEEPSEEK_API). Please contact the administrator.",
         )
 
-    context = get_relevant_docs(question)
-    if context:
-        system_prompt = (
-            SYSTEM_PROMPT_BASE
-            + "\n\n=== REFERENCE DOCUMENTATION ===\n"
-            + context
+    doc_context = get_relevant_docs(question)
+    card_context = get_card_context(question)
+    agent_result = _CHAT_AGENT.build_skill_context(question)
+    skill_context = agent_result.context
+    navigation_links = agent_result.navigation_links
+
+    context_sections = []
+    if doc_context:
+        context_sections.append("=== REFERENCE DOCUMENTATION ===\n" + doc_context)
+    if card_context:
+        context_sections.append(
+            "=== LIVE CARD DATA (PUBLIC, NON-SENSITIVE) ===\n" + card_context
         )
+    if skill_context:
+        context_sections.append("=== LIVE SKILL OUTPUTS ===\n" + skill_context)
+
+    if context_sections:
+        system_prompt = SYSTEM_PROMPT_BASE + "\n\n" + "\n\n".join(context_sections)
     else:
         system_prompt = SYSTEM_PROMPT_BASE
 
@@ -147,6 +147,17 @@ def ask(payload: ChatRequest):
             temperature=0.4,
         )
         answer = response.choices[0].message.content.strip()
+        if navigation_links:
+            link_lines = [
+                "",
+                "Quick actions in Upload Panel:",
+            ]
+            for link in navigation_links[:5]:
+                title = link.get("title", "Open in Upload Panel")
+                url = link.get("url", "")
+                if title and url:
+                    link_lines.append(f"- [{title}]({url})")
+            answer = answer + "\n" + "\n".join(link_lines)
         return ChatResponse(answer=answer)
 
     except Exception as e:
