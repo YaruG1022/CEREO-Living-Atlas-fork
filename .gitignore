@@ -867,3 +867,5 @@ documentation/card_images_403_diagnosis.md
 LivingAtlas1-main/backend/scripts/migration_manifest.csv
 LivingAtlas1-main/backend/scripts/migrate_gcs_to_azure.py
 LivingAtlas1-main/backend/scripts/migrate_gcs_to_azure.sql
+LivingAtlas1-main/backend/pc_crash.log
+LivingAtlas1-main/backend/pc_trace.log
