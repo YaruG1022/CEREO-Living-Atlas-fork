@@ -37,6 +37,18 @@ function ChangelogHistory() {
                         <h4>Card Representation</h4>
                         <p>Added a new Representation section to the Learn More modal that previews how a card is represented — as a point, multiple points, a polygon, or an image overlay — and moved the Edit Coordinate / Edit Polygon / Edit Image and Change Location Type buttons into it. The preview is visible in both view and edit modes, while the buttons appear only when editing.</p>
 
+                        <h4>Chatbot Standalone Service</h4>
+                        <p>The RWC Living Atlas Helper chatbot now runs as a standalone microservice in its own repository, deployed independently from the main backend — chatbot updates no longer require redeploying the Living Atlas backend, and the frontend routes chat requests to the new service through a configurable URL.</p>
+                        <p>The chatbot now reads live card data through a new backend <code>/cards/summary</code> endpoint (public, non-sensitive fields only) instead of connecting to the database directly, so no database credentials are stored in the chatbot service.</p>
+                        <p>Removed the legacy in-app chat endpoints, chatbot knowledge base files, and indexing scripts from the main backend, trimming its dependencies.</p>
+
+                        <h4>Chatbot RAG Upgrade – Pinecone Hosted Embeddings</h4>
+                        <p>Completed the migration of the chatbot's knowledge retrieval to Pinecone (started 5/25): knowledge base documents are now embedded server-side by Pinecone's hosted multilingual-e5-large model, removing the local embedding model from the pipeline and adding multilingual retrieval support.</p>
+
+                        <h4>Chatbot Answer Quality</h4>
+                        <p>Fixed chatbot answers that were sometimes cut off mid-sentence or came back empty: the generation model's hidden reasoning could consume the entire response token budget. Reasoning mode is now disabled for the chatbot's context-grounded answers and the token budget was raised — responses are also noticeably faster as a result.</p>
+                        <p>Fixed irrelevant Quick Action navigation links in chatbot answers: short words such as "is" no longer accidentally match folder names like "GIS", while short folder codes (WQ, AQ, WR) still match exactly.</p>
+
                         <h4>Bug Fixes</h4>
                         <p>Fixed an issue where changing a card's title in edit mode and saving had no effect — the new title wasn't being written to the database. Titles now save correctly.</p>
                         <hr />
