@@ -4,6 +4,11 @@ import { faEarthAmericas } from '@fortawesome/free-solid-svg-icons';
 import api from './api';
 import './ChatbotWidget.css';
 
+// Standalone chatbot service URL. When REACT_APP_CHATBOT_API_URL is set (e.g.
+// on Netlify), chat requests go to that service instead of the main backend;
+// when unset, they fall back to the main backend's built-in /chat endpoint.
+const CHATBOT_API_BASE = (process.env.REACT_APP_CHATBOT_API_URL || '').replace(/\/+$/, '');
+
 export default function ChatbotWidget({
   displayMode = 'floating',
   isOpen: controlledIsOpen,
@@ -189,7 +194,7 @@ export default function ChatbotWidget({
       const res = await api.post('/chat/ask', {
         question: text,
         history: messages.slice(-6),
-      });
+      }, CHATBOT_API_BASE ? { baseURL: CHATBOT_API_BASE } : {});
       const answer = res.data?.answer ?? 'Sorry, I couldn\'t get a response.';
       setMessages(prev => [...prev, { role: 'assistant', text: formatAssistantText(answer) }]);
     } catch (err) {
