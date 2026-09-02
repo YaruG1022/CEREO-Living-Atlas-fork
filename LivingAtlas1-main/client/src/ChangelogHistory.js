@@ -26,6 +26,12 @@ function ChangelogHistory() {
             <div className="changelog-history-body">
                 {activeTab === 'latest' && (
                     <>
+                        <h3>Update Date: 9/1 - 9/15/2026</h3>
+
+                        <h4>User Manual &amp; Onboarding</h4>
+                        <p>Updated the user manual and onboarding for the Card Container, ArcGIS Upload Panel, Custom Layers Panel, and Card Detail View (Learn More modal) to match the current app features.</p>
+                        <hr />
+
                         <h3>Update Date: 8/15 - 8/30/2026</h3>
 
                         <h4>Rich Text Descriptions</h4>

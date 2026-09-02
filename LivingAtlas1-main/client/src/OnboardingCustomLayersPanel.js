@@ -6,7 +6,7 @@ const ONBOARDING_STEPS = [
     {
         selector: '.custom-layers-panel',
         title: 'Custom Layers Panel',
-        description: 'This panel lets you organize saved ArcGIS layers into folders, browse services, and manage layer settings.',
+        description: 'This panel lets you organize saved ArcGIS layers and uploaded files (GeoJSON, KML, Shapefile) into folders, browse services, and manage layer settings.',
         placement: 'left',
     },
     {
@@ -30,7 +30,7 @@ const ONBOARDING_STEPS = [
     {
         selector: '[data-onboarding-target="custom-layers-search-area"]',
         title: 'Search',
-        description: 'Search by folder, service, or layer name. Use the search-type dropdown (Any/Folder/Service/Layer) to narrow what gets matched.',
+        description: 'Search by folder, service, or layer name within the current scope.',
         placement: 'left',
     },
     {
@@ -54,7 +54,7 @@ const ONBOARDING_STEPS = [
     {
         selector: '[data-onboarding-target="custom-layers-panel-actions"]',
         title: 'Panel Actions',
-        description: 'This action row groups New Folder, Show Added Only, and Clear All so you can organize saved services and focus on items already loaded on the map.',
+        description: 'This action row groups New Folder, Upload File, Show Added Only, and Clear All. Upload File imports a GeoJSON, KML, or Shapefile (.zip) as a new layer; Show Added Only focuses on items already loaded on the map.',
         placement: 'left',
     },
     {

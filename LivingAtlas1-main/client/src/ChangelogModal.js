@@ -16,6 +16,13 @@ function ChangelogModal({ isOpen, onClose }) {
 
             <div className="changelog-modal-body">
                 <>
+                        <h3>Update Date: 9/1 - 9/15/2026</h3>
+
+                        <h4>User Manual &amp; Onboarding</h4>
+                        <ul className="changelog-list">
+                          <li>Updated the user manual and onboarding for the Card Container, ArcGIS Upload Panel, Custom Layers Panel, and Card Detail View (Learn More modal) to match the current app features.</li>
+                        </ul>
+
                         <h3>Update Date: 8/15 - 8/30/2026</h3>
 
                         <h4>Rich Text Descriptions</h4>

@@ -36,7 +36,7 @@ const ONBOARDING_STEPS = [
     {
         selector: '[data-onboarding-target="onboarding-single-card"]',
         title: 'Single Card',
-        description: 'Each card includes a preview image, title, and category summary to quickly understand what the card is about.',
+        description: 'Each card includes a preview image, title, and its tags to quickly understand what the card is about.',
         placement: 'left',
         requiresCard: true,
     },

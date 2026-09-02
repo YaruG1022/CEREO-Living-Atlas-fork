@@ -46,6 +46,7 @@ import {
   faCircleQuestion,
   faCirclePlay,
   faFloppyDisk,
+  faUpload,
 } from '@fortawesome/free-solid-svg-icons';
 import { faHeart as regularHeart, faFolder } from '@fortawesome/free-regular-svg-icons';
 import './Card.css';
@@ -417,9 +418,9 @@ function UserManual() {
                 <h2 className="card-title">Sample Dataset Title</h2>
               </div>
 
-              {/* Category + zoom */}
+              {/* Tags + zoom */}
               <div className="card-meta-row">
-                <p className="card-meta">Watershed</p>
+                <p className="card-meta">river, watershed</p>
                 <button
                   className="card-meta-zoom-btn"
                   title="Locate on map"
@@ -617,7 +618,7 @@ function UserManual() {
             </div>
           </div>
 
-          {/* 7. Category tag */}
+          {/* 7. Tags */}
           <div className="um-feature-row">
             <div className="um-feature-demo">
               <div className="um-meta-row-demo">
@@ -627,18 +628,17 @@ function UserManual() {
                     <h2 className="card-title">Sample Title</h2>
                   </div>
                   <div className="card-meta-row">
-                    <p className="card-meta">Watershed</p>
+                    <p className="card-meta">river, watershed</p>
                   </div>
                 </div>
               </div>
             </div>
             <div className="um-feature-info">
-              <p className="um-feature-title">Category Tag</p>
+              <p className="um-feature-title">Tags</p>
               <p className="um-feature-desc">
-                A small label below the title shows the card's category. The available
-                categories are: <strong>River</strong>, <strong>Watershed</strong>,{' '}
-                <strong>Places</strong>, and <strong>Other</strong>. Cards without a
-                category show "Uncategorized".
+                The small text below the title shows the card's tags, separated by commas.
+                Tags overflow with an ellipsis when there are too many to fit. Cards with no
+                tags show "No tags". Tags are added and edited in the Learn More modal.
               </p>
             </div>
           </div>
@@ -669,7 +669,7 @@ function UserManual() {
             <div className="um-feature-info">
               <p className="um-feature-title">Zoom to Map</p>
               <p className="um-feature-desc">
-                The circular magnifying-glass button on the right side of the category row
+                The circular magnifying-glass button on the right side of the tags row
                 flies the main map to the card's location — either a point marker or a
                 polygon area. Hover over it to see the scale effect; click it to animate
                 the map.
@@ -1651,6 +1651,18 @@ function UserManual() {
                   <strong>Longitude:</strong> -120.5
                 </p>
               </div>
+              <div className="learn-more-location-section">
+                <p><strong>Representation:</strong></p>
+                <div className="learn-more-representation-preview">
+                  <div className="learn-more-representation-icon">
+                    <FontAwesomeIcon icon={faLocationDot} />
+                  </div>
+                  <div className="learn-more-representation-info">
+                    <span className="learn-more-representation-type">Point</span>
+                    <span className="learn-more-representation-detail">46.6, -120.5</span>
+                  </div>
+                </div>
+              </div>
               <div className="learn-more-links-view">
                 <strong>Links:</strong>
                 <ul className="learn-more-links-list">
@@ -1658,7 +1670,15 @@ function UserManual() {
                 </ul>
               </div>
               <p className="learn-more-modal-description"><strong>Description:</strong> A comprehensive study of the Yakima River Basin watershed covering hydrology, ecology, and land-use patterns over a 10-year period.</p>
-              <p><strong>Tags:</strong> hydrology, ecology, yakima, land-use</p>
+              <p><strong>Tags:</strong>
+                <span className="learn-more-tags-chips">
+                  <span className="learn-more-tag-chip learn-more-tag-chip-readonly">hydrology</span>
+                  <span className="learn-more-tag-chip learn-more-tag-chip-readonly">ecology</span>
+                  <span className="learn-more-tag-chip learn-more-tag-chip-readonly">yakima</span>
+                  <span className="learn-more-tag-chip learn-more-tag-chip-readonly">land-use</span>
+                </span>
+              </p>
+              <p><strong>Visibility:</strong> Public</p>
               <div className="file-list learn-more-file-list">
                 <h3>Downloadable Files:</h3>
                 <ul><li><a href="#um" onClick={e => e.preventDefault()}>yakima_study_2023.pdf</a></li></ul>
@@ -1676,6 +1696,24 @@ function UserManual() {
                       <span className="learn-more-arcgis-row-text">Hydrology</span>
                       <span className="learn-more-arcgis-row-sep"> › </span>
                       <span className="learn-more-arcgis-row-text learn-more-arcgis-row-name">Streams &amp; Rivers</span>
+                    </span>
+                    <button type="button" className="learn-more-arcgis-goto-btn" style={{ pointerEvents: 'none' }}>›</button>
+                  </li>
+                </ul>
+              </div>
+              <div className="learn-more-arcgis-links-section">
+                <p><strong>Linked Custom Layers:</strong></p>
+                <ul className="learn-more-arcgis-links-list">
+                  <li className="learn-more-arcgis-link-item">
+                    <label className="learn-more-arcgis-layer-toggle-label">
+                      <input type="checkbox" className="learn-more-arcgis-layer-toggle-cb" defaultChecked readOnly />
+                    </label>
+                    <span className="learn-more-arcgis-link-row">
+                      <span className="learn-more-arcgis-row-text">Custom</span>
+                      <span className="learn-more-arcgis-row-sep"> › </span>
+                      <span className="learn-more-arcgis-row-text">My Hydrology Layers</span>
+                      <span className="learn-more-arcgis-row-sep"> › </span>
+                      <span className="learn-more-arcgis-row-text learn-more-arcgis-row-name">WA Streams and Rivers</span>
                     </span>
                     <button type="button" className="learn-more-arcgis-goto-btn" style={{ pointerEvents: 'none' }}>›</button>
                   </li>
@@ -1895,9 +1933,11 @@ function UserManual() {
               <p className="um-feature-desc">
                 In edit mode each info field becomes an inline text input with a light
                 border. The <strong>Card Creator</strong> field has a grey background
-                indicating it is read-only. The <strong>Description</strong> field expands
-                into a resizable textarea and <strong>Tags</strong> accepts a
-                comma-separated string.
+                indicating it is read-only. The <strong>Description</strong> field becomes
+                a rich text editor with a formatting toolbar, and <strong>Tags</strong>{' '}
+                are edited as removable chips (see the Rich Text Description and Tags
+                features below). A <strong>Visibility</strong> dropdown sets the card to
+                Public or Private.
               </p>
             </div>
           </div>
@@ -2017,6 +2057,136 @@ function UserManual() {
                 Detail View. The <strong>›</strong> button on the right jumps to that layer
                 in the ArcGIS Upload Panel. In edit mode you can remove links or add new
                 ones with <strong>+ Add ArcGIS Item</strong>.
+              </p>
+            </div>
+          </div>
+
+          {/* 11b. Rich Text Description */}
+          <div className="um-feature-row">
+            <div className="um-feature-demo">
+              <div className="um-isolated-demo um-fields-demo">
+                <p style={{ margin: '0 0 6px' }}><strong>Description:</strong></p>
+                <div style={{ border: '1px solid #d8e1ea', borderRadius: '6px', padding: '6px 8px' }}>
+                  <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', borderBottom: '1px solid #e5e7eb', paddingBottom: '6px', marginBottom: '6px' }}>
+                    {['B', 'I', 'U', 'S', '• 1.', '• •', '↶', '↷', '¶'].map((t, i) => (
+                      <span key={i} style={{ fontSize: '11px', fontWeight: 600, color: '#374957', padding: '2px 5px', borderRadius: '3px', border: '1px solid #d8e1ea', background: '#f4f6f9' }}>{t}</span>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#374957', minHeight: '40px' }}><strong>Bold</strong>, <em>italic</em>, <u>underlined</u>, and lists…</div>
+                </div>
+              </div>
+            </div>
+            <div className="um-feature-info">
+              <p className="um-feature-title">Rich Text Description</p>
+              <p className="um-feature-desc">
+                In edit mode the Description field is a Word-style rich text editor with a
+                toolbar for bold, italic, underline, strikethrough, bulleted and numbered
+                lists, undo/redo, and a heading dropdown (Paragraph, Heading 1–6).
+                Descriptions are stored as formatted HTML, displayed with their formatting
+                in the Detail View, and converted to plain text for PDF export.
+              </p>
+            </div>
+          </div>
+
+          {/* 11c. Tags & Visibility */}
+          <div className="um-feature-row">
+            <div className="um-feature-demo">
+              <div className="um-isolated-demo" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '10px' }}>
+                <div>
+                  <p style={{ margin: '0 0 4px' }}><strong>Tags:</strong></p>
+                  <div className="learn-more-tags-editor">
+                    <span className="learn-more-tag-chip">hydrology<button type="button" className="learn-more-tag-chip-remove" style={{ pointerEvents: 'none' }}>×</button></span>
+                    <span className="learn-more-tag-chip">ecology<button type="button" className="learn-more-tag-chip-remove" style={{ pointerEvents: 'none' }}>×</button></span>
+                    <input className="learn-more-tag-input" type="text" placeholder="Add another tag" readOnly />
+                  </div>
+                </div>
+                <div>
+                  <p style={{ margin: '0 0 4px' }}><strong>Visibility:</strong></p>
+                  <select className="learn-more-inline-input" style={{ pointerEvents: 'none' }}>
+                    <option>Public (visible to everyone)</option>
+                    <option>Private (only visible to me)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div className="um-feature-info">
+              <p className="um-feature-title">Tags &amp; Visibility</p>
+              <p className="um-feature-desc">
+                In edit mode <strong>Tags</strong> are edited as pills, each with its own
+                <strong> ×</strong> remove button; type into the inline input and press
+                <strong> Enter</strong> or a comma to add a tag. The <strong>Visibility</strong>{' '}
+                dropdown marks the card <strong>Public</strong> (visible to everyone) or{' '}
+                <strong>Private</strong> (only visible to you). In view mode tags appear as
+                read-only pills and visibility is shown as plain text.
+              </p>
+            </div>
+          </div>
+
+          {/* 11d. Representation */}
+          <div className="um-feature-row">
+            <div className="um-feature-demo">
+              <div className="um-isolated-demo" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '10px' }}>
+                <div className="learn-more-location-section" style={{ margin: 0 }}>
+                  <p style={{ margin: '0 0 6px' }}><strong>Representation:</strong></p>
+                  <div className="learn-more-representation-preview">
+                    <div className="learn-more-representation-icon">
+                      <FontAwesomeIcon icon={faDrawPolygon} />
+                    </div>
+                    <div className="learn-more-representation-info">
+                      <span className="learn-more-representation-type">Polygon</span>
+                      <span className="learn-more-representation-detail">14 vertices</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="learn-more-location-actions" style={{ margin: 0 }}>
+                  <button type="button" className="learn-more-select-location-btn" style={{ pointerEvents: 'none' }}>Edit Polygon</button>
+                  <button type="button" className="learn-more-select-location-btn" style={{ pointerEvents: 'none' }}>Change location type</button>
+                </div>
+              </div>
+            </div>
+            <div className="um-feature-info">
+              <p className="um-feature-title">Representation &amp; Location Editing</p>
+              <p className="um-feature-desc">
+                A <strong>Representation</strong> section previews how the card is shown on
+                the map — as a <strong>Point</strong>, <strong>Multi-point</strong>,{' '}
+                <strong>Polygon</strong>, or <strong>Image</strong> overlay. In edit mode it
+                also shows <strong>Edit Coordinate</strong>, <strong>Edit Polygon / Edit
+                Image</strong>, and <strong>Change location type</strong> buttons; Change
+                location type opens a menu to switch between Point, Polygon, and Image.
+              </p>
+            </div>
+          </div>
+
+          {/* 11e. Linked Custom Layers */}
+          <div className="um-feature-row">
+            <div className="um-feature-demo">
+              <div className="um-isolated-demo um-arcgis-demo">
+                <p style={{ margin: '0 0 6px', fontSize: '0.95rem', color: '#374151' }}><strong>Linked Custom Layers:</strong></p>
+                <ul className="learn-more-arcgis-links-list">
+                  <li className="learn-more-arcgis-link-item">
+                    <label className="learn-more-arcgis-layer-toggle-label">
+                      <input type="checkbox" className="learn-more-arcgis-layer-toggle-cb" defaultChecked readOnly />
+                    </label>
+                    <span className="learn-more-arcgis-link-row">
+                      <span className="learn-more-arcgis-row-text">Custom</span>
+                      <span className="learn-more-arcgis-row-sep"> › </span>
+                      <span className="learn-more-arcgis-row-text">My Hydrology Layers</span>
+                      <span className="learn-more-arcgis-row-sep"> › </span>
+                      <span className="learn-more-arcgis-row-text learn-more-arcgis-row-name">WA Streams and Rivers</span>
+                    </span>
+                    <button type="button" className="learn-more-arcgis-goto-btn" style={{ pointerEvents: 'none' }}>›</button>
+                  </li>
+                </ul>
+              </div>
+            </div>
+            <div className="um-feature-info">
+              <p className="um-feature-title">Linked Custom Layers</p>
+              <p className="um-feature-desc">
+                Cards can also link to your saved <strong>Custom Layers</strong>. Each row
+                shows a breadcrumb (Custom › folder › layer), a visibility checkbox, and a
+                <strong> ›</strong> button that jumps to the Custom Layers Panel. In edit
+                mode you can remove links with <strong>×</strong> and add new ones with{' '}
+                <strong>+ Add Custom Layer</strong>.
               </p>
             </div>
           </div>
@@ -2329,6 +2499,7 @@ function UserManual() {
                   <div className="layer-context-menu" style={{ position: 'static', boxShadow: 'none' }}>
                     <button style={{ pointerEvents: 'none' }}>Rename</button>
                     <button style={{ pointerEvents: 'none' }}>Learn More</button>
+                    <button style={{ pointerEvents: 'none' }}>Save to Custom Layers</button>
                     <button style={{ pointerEvents: 'none' }}>Pin (Auto-load)</button>
                   </div>
                 </div>
@@ -2346,10 +2517,14 @@ function UserManual() {
               <p className="um-feature-title">Layer Rows &amp; Right-Click Menu</p>
               <p className="um-feature-desc">
                 Each service or layer is shown as a row with a checkbox and name.
-                <strong> Right-click</strong> any row to open a context menu:
+                <strong> Right-click</strong> a service row to open a context menu:
                 <br />• <strong>Rename</strong> — rename the service (admin only)
                 <br />• <strong>Learn More</strong> — open the Service / Layer Info modal with ArcGIS REST metadata
+                <br />• <strong>Save to Custom Layers</strong> — copy the service into your Custom Layers library
                 <br />• <strong>Pin (Auto-load)</strong> — pin the item so it loads automatically every time the panel opens; right-click again and choose <strong>Unpin</strong> to remove it
+              </p>
+              <p className="um-feature-desc" style={{ marginTop: '8px' }}>
+                Right-clicking a <strong>layer</strong> row offers <strong>Learn More</strong> and <strong>Pin (Auto-load)</strong>.
               </p>
               <span className="um-feature-note">
                 You can also click the <strong>three-dot button</strong> on a service row (same as Learn More) to open Service info directly.
@@ -2822,10 +2997,11 @@ function UserManual() {
       <section className="um-section">
         <h2>Custom Layers Panel</h2>
         <p className="um-section-desc">
-          The Custom Layers Panel is your personal library of saved ArcGIS services. Add
-          services here from the ArcGIS Upload Panel, organize them into folders, reorder
-          them by dragging, and pin items to auto-load every time you open the panel. Login
-          is required to use this panel.
+          The Custom Layers Panel is your personal library of saved map layers. Add ArcGIS
+          services here from the ArcGIS Upload Panel, or upload your own GeoJSON, KML, and
+          Shapefile (.zip) files directly. Organize layers into folders, reorder them by
+          dragging, and pin items to auto-load every time you open the panel. Login is
+          required to use this panel.
         </p>
 
         {/* ---- Panel shell demo ---- */}
@@ -2926,7 +3102,7 @@ function UserManual() {
                 to the map.
               </p>
               <span className="um-feature-note">
-                The <strong>New Folder</strong> button now lives in the action row below the opacity slider, alongside Show Added Only and Clear All.
+                The <strong>New Folder</strong> and <strong>Upload File</strong> buttons live in the action row below the opacity slider, alongside Show Added Only and Clear All.
               </span>
             </div>
           </div>
@@ -2993,6 +3169,10 @@ function UserManual() {
                   <FontAwesomeIcon icon={faFolderPlus} />
                   <span>New Folder</span>
                 </button>
+                <button type="button" className="clear-all-layers-btn custom-layers-panel-upload-btn" style={{ pointerEvents: 'none' }}>
+                  <FontAwesomeIcon icon={faUpload} />
+                  <span>Upload File</span>
+                </button>
                 <button type="button" className="clear-all-layers-btn clear-all-layers-btn--toggle is-active" style={{ pointerEvents: 'none' }}>
                   <FontAwesomeIcon icon={faEye} />
                   <span>Showing Added Only</span>
@@ -3003,12 +3183,13 @@ function UserManual() {
               </div>
             </div>
             <div className="um-feature-info">
-              <p className="um-feature-title">Show Added Only &amp; Clear All</p>
+              <p className="um-feature-title">New Folder, Upload File, Show Added Only &amp; Clear All</p>
               <p className="um-feature-desc">
-                The action row groups <strong>New Folder</strong>, <strong>Show Added Only</strong>,
-                and <strong>Clear All</strong> in one place. Show Added Only collapses the list to
-                services with at least one active layer, while Clear All removes all checked
-                layers from the map in one click.
+                The action row groups <strong>New Folder</strong>, <strong>Upload File</strong>,{' '}
+                <strong>Show Added Only</strong>, and <strong>Clear All</strong> in one place.
+                Upload File imports a GeoJSON, KML, or Shapefile (.zip) file as a new layer.
+                Show Added Only collapses the list to services with at least one active layer,
+                while Clear All removes all checked layers from the map in one click.
               </p>
             </div>
           </div>
