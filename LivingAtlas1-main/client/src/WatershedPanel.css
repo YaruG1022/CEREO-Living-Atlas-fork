@@ -1,0 +1,223 @@
+/* Watershed Delineation Panel — mirrors the basemap switcher panel layout */
+.watershed-panel {
+    position: fixed;
+    top: var(--app-navbar-height);
+    left: var(--app-left-sidebar-collapsed-width);
+    width: var(--app-secondary-panel-width);
+    height: calc(100vh - var(--app-navbar-height));
+    background: linear-gradient(180deg, #f4f6f9 0%, #eceff4 100%);
+    border: 1px solid #d8e1ea;
+    box-shadow: 10px 0 24px rgba(16, 33, 54, 0.18);
+    z-index: 1200;
+    padding: 0 8px 8px 8px;
+    font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    color: #223244;
+}
+
+.watershed-panel.watershed-panel--split-bottom {
+    top: calc(var(--app-navbar-height) + ((100vh - var(--app-navbar-height)) / 2));
+    height: calc((100vh - var(--app-navbar-height)) / 2);
+}
+
+.watershed-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 4px 6px 4px;
+    border-bottom: 1px solid #d8e1ea;
+    margin-bottom: 6px;
+    flex-shrink: 0;
+}
+
+.watershed-panel-title {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+}
+
+.watershed-panel-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.watershed-panel-icon-btn {
+    width: 28px;
+    height: 28px;
+    min-width: 0;
+    min-height: 0;
+    padding: 0;
+    margin: 0;
+    background: #fff;
+    border: 1px solid #bfd0e2;
+    color: #27425d;
+    font-size: 13px;
+    cursor: pointer;
+    border-radius: 50%;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.watershed-panel-icon-btn:hover {
+    border-color: #8eabc8;
+    background: #f2f7fc;
+    box-shadow: 0 4px 12px rgba(25,118,210,0.12);
+}
+
+.watershed-panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+    background: #ffffff;
+    border: 1px solid #d8e1ea;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    scrollbar-width: thin;
+    scrollbar-color: #9ab2cb #dce6f0;
+}
+
+.watershed-panel-intro {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: #5c748d;
+}
+
+.watershed-panel-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-weight: 500;
+}
+
+.watershed-panel-field select {
+    padding: 6px 8px;
+    border: 1px solid #bfd0e2;
+    border-radius: 6px;
+    background: #fff;
+    color: #223244;
+    font-size: 13px;
+}
+
+.watershed-panel-arm-btn {
+    padding: 8px 10px;
+    border: 1px solid #6d9bc6;
+    border-radius: 7px;
+    background: #e3f2fd;
+    color: #17415f;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.watershed-panel-arm-btn:hover:not(:disabled) {
+    background: #d2e8fb;
+    border-color: #4f86b6;
+}
+
+.watershed-panel-arm-btn--armed {
+    background: #fff3e0;
+    border-color: #e0a04f;
+    color: #7a4a12;
+}
+
+.watershed-panel-arm-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.watershed-panel-note {
+    padding: 8px 10px;
+    border: 1px dashed #c8d6e5;
+    border-radius: 6px;
+    background: #f8fbff;
+    color: #38516b;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.watershed-panel-warning {
+    margin-top: 6px;
+    color: #a15c00;
+    font-weight: 500;
+}
+
+.watershed-panel-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 8px 10px;
+    border: 1px solid #cfe0ef;
+    border-radius: 6px;
+    background: #f2f7fc;
+    color: #27425d;
+    font-size: 12px;
+}
+
+.watershed-panel-cancel-btn {
+    padding: 4px 10px;
+    border: 1px solid #bfd0e2;
+    border-radius: 6px;
+    background: #fff;
+    color: #27425d;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.watershed-panel-cancel-btn:hover {
+    border-color: #8eabc8;
+    background: #f2f7fc;
+}
+
+.watershed-panel-error {
+    padding: 8px 10px;
+    border: 1px solid #e7b6b6;
+    border-radius: 6px;
+    background: #fdf3f3;
+    color: #9c2b2b;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.watershed-panel-result {
+    padding: 8px 10px;
+    border: 1px solid #bfe0c4;
+    border-radius: 6px;
+    background: #f2fbf4;
+    color: #1e5631;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.watershed-panel-result-workspace {
+    word-break: break-all;
+}
+
+.watershed-panel-clear-btn {
+    padding: 7px 10px;
+    border: 1px solid #d3b1b1;
+    border-radius: 7px;
+    background: #fdf6f6;
+    color: #8c3a3a;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.watershed-panel-clear-btn:hover {
+    background: #fae9e9;
+    border-color: #c08f8f;
+}

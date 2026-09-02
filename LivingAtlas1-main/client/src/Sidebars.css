@@ -126,6 +126,7 @@
     .left-sidebar-cards-button,
     .left-sidebar-basemap-button,
     .left-sidebar-chatbot-button,
+    .left-sidebar-watershed-button,
     .left-sidebar-layers-button,
     .left-sidebar-customlayers-button,
     .left-sidebar-trash-button,
@@ -559,6 +560,7 @@
     .left-sidebar-cards-button,
     .left-sidebar-basemap-button,
     .left-sidebar-chatbot-button,
+    .left-sidebar-watershed-button,
     .left-sidebar-layers-button,
     .left-sidebar-customlayers-button,
     .left-sidebar-trash-button,
@@ -580,7 +582,8 @@
     .left-sidebar-cards-button,
     .left-sidebar-basemap-button,
     .left-sidebar-customlayers-button,
-    .left-sidebar-chatbot-button
+    .left-sidebar-chatbot-button,
+    .left-sidebar-watershed-button
 ).active {
     background-color: #444a53;
     color: #f5f8ff;
@@ -596,6 +599,7 @@
     .left-sidebar-cards-button,
     .left-sidebar-basemap-button,
     .left-sidebar-chatbot-button,
+    .left-sidebar-watershed-button,
     .left-sidebar-layers-button,
     .left-sidebar-customlayers-button,
     .left-sidebar-trash-button,
@@ -615,6 +619,7 @@
     .left-sidebar-cards-button,
     .left-sidebar-basemap-button,
     .left-sidebar-chatbot-button,
+    .left-sidebar-watershed-button,
     .left-sidebar-layers-button,
     .left-sidebar-customlayers-button,
     .left-sidebar-trash-button,

@@ -15,9 +15,10 @@ import ArcgisUploadPanel from './ArcgisUploadPanel';
 import CustomLayersPanel from './CustomLayersPanel';
 import { applyAreaVisibility } from './AreaFilter';
 import { showAll } from "./Filter.js";
-import { faLayerGroup } from '@fortawesome/free-solid-svg-icons';
-import { faBell, faMap, faObjectGroup, faInfoCircle, faEarthAmericas } from '@fortawesome/free-solid-svg-icons';
+import { faCommentDots } from '@fortawesome/free-solid-svg-icons';
+import { faBell, faMap, faObjectGroup, faInfoCircle, faEarthAmericas, faWater } from '@fortawesome/free-solid-svg-icons';
 import BasemapSwitcher from './BasemapSwitcher';
+import WatershedPanel from './WatershedPanel';
 import Modal from 'react-modal';
 import ChangelogModal from './ChangelogModal';
 import GeneralOnboardingModal from './GeneralOnboardingModal';
@@ -66,6 +67,7 @@ function Home(props) {
     const [isUploadPanelOpen, setIsUploadPanelOpen] = useState(false);
     const [arcgisNavigateTarget, setArcgisNavigateTarget] = useState(null);
     const [isCustomLayerPanelOpen, setIsCustomLayerPanelOpen] = useState(false);
+    const [isWatershedPanelOpen, setIsWatershedPanelOpen] = useState(false);
     const [customLayersRefreshKey, setCustomLayersRefreshKey] = useState(0);
     const [cardPanelSide, setCardPanelSide] = useState('right');
     const [folderExpanded, setFolderExpanded] = useState(false);
@@ -154,6 +156,7 @@ function Home(props) {
             setIsUploadPanelOpen(true);
             setIsCustomLayerPanelOpen(false);
             setIsBasemapOpen(false);
+            setIsWatershedPanelOpen(false);
             if (chatbotDisplayMode === 'sidebar') {
                 setIsChatbotOpen(false);
             }
@@ -428,6 +431,7 @@ function Home(props) {
         setIsUploadPanelOpen(true);
         setIsCustomLayerPanelOpen(false);
         setIsBasemapOpen(false);
+        setIsWatershedPanelOpen(false);
         if (chatbotDisplayMode === 'sidebar') {
             setIsChatbotOpen(false);
         }
@@ -436,6 +440,7 @@ function Home(props) {
         setIsCustomLayerPanelOpen(true);
         setIsUploadPanelOpen(false);
         setIsBasemapOpen(false);
+        setIsWatershedPanelOpen(false);
         if (chatbotDisplayMode === 'sidebar') {
             setIsChatbotOpen(false);
         }
@@ -444,6 +449,7 @@ function Home(props) {
         setIsUploadPanelOpen(false);
         setIsCustomLayerPanelOpen(false);
         setIsBasemapOpen(true);
+        setIsWatershedPanelOpen(false);
         if (chatbotDisplayMode === 'sidebar') {
             setIsChatbotOpen(false);
         }
@@ -915,6 +921,7 @@ function Home(props) {
                 setIsUploadPanelOpen(false);
                 setIsCustomLayerPanelOpen(false);
                 setIsBasemapOpen(false);
+                setIsWatershedPanelOpen(false);
             }
             return next;
         });
@@ -926,6 +933,7 @@ function Home(props) {
             setIsUploadPanelOpen(false);
             setIsCustomLayerPanelOpen(false);
             setIsBasemapOpen(false);
+            setIsWatershedPanelOpen(false);
         }
         setIsChatbotOpen(true);
     };
@@ -1238,10 +1246,11 @@ function Home(props) {
                         });
                         setIsCustomLayerPanelOpen(false);
                         setIsBasemapOpen(false);
+                        setIsWatershedPanelOpen(false);
                     }}
                     title="Toggle Layers"
                 >
-                    <FontAwesomeIcon icon={faLayerGroup} />
+                    <FontAwesomeIcon icon={faEarthAmericas} />
                 </button>
 
                 {/* Upload Panel */}
@@ -1271,6 +1280,7 @@ function Home(props) {
                         });
                         setIsUploadPanelOpen(false);
                         setIsBasemapOpen(false);
+                        setIsWatershedPanelOpen(false);
                     }}
                     title="Custom Layers"
                 >
@@ -1291,9 +1301,10 @@ function Home(props) {
                     className={`left-sidebar-basemap-button${isBasemapOpen ? ' active' : ''}`}
                     data-onboarding-target="left-sidebar-basemap"
                     onClick={() => {
-                        const shouldForceOpen = isUploadPanelOpen || isCustomLayerPanelOpen;
+                        const shouldForceOpen = isUploadPanelOpen || isCustomLayerPanelOpen || isWatershedPanelOpen;
                         setIsUploadPanelOpen(false);
                         setIsCustomLayerPanelOpen(false);
+                        setIsWatershedPanelOpen(false);
                         setIsBasemapOpen(v => (shouldForceOpen ? true : !v));
                         if (chatbotDisplayMode === 'sidebar') {
                             setIsChatbotOpen(false);
@@ -1303,6 +1314,33 @@ function Home(props) {
                 >
                     <FontAwesomeIcon icon={faMap} />
                 </button>
+
+                {/* Watershed Delineation Button */}
+                <button
+                    className={`left-sidebar-watershed-button${isWatershedPanelOpen ? ' active' : ''}`}
+                    data-onboarding-target="left-sidebar-watershed"
+                    onClick={() => {
+                        setIsWatershedPanelOpen(v => {
+                            const next = !v;
+                            if (next && chatbotDisplayMode === 'sidebar') setIsChatbotOpen(false);
+                            return next;
+                        });
+                        setIsUploadPanelOpen(false);
+                        setIsCustomLayerPanelOpen(false);
+                        setIsBasemapOpen(false);
+                    }}
+                    title="Watershed Delineation"
+                >
+                    <FontAwesomeIcon icon={faWater} />
+                </button>
+
+                {/* Watershed Delineation Panel */}
+                <WatershedPanel
+                    isOpen={isWatershedPanelOpen}
+                    onClose={() => setIsWatershedPanelOpen(false)}
+                    splitBottom={cardPanelSide === 'left' && !isCollapsed}
+                    mapInstance={getMapboxMap}
+                />
 
                 <button
                     className={`left-sidebar-chatbot-button${chatbotDisplayMode === 'sidebar' && isChatbotOpen ? ' active' : ''}`}
@@ -1315,7 +1353,7 @@ function Home(props) {
                     }
                     disabled={chatbotDisplayMode === 'floating'}
                 >
-                    <FontAwesomeIcon icon={faEarthAmericas} />
+                    <FontAwesomeIcon icon={faCommentDots} />
                 </button>
 
                 {/* Basemap Switcher Panel */}
@@ -1488,6 +1526,7 @@ function Home(props) {
                 isUploadPanelOpen={isUploadPanelOpen}
                 isCustomLayerPanelOpen={isCustomLayerPanelOpen}
                 isBasemapOpen={isBasemapOpen}
+                isWatershedPanelOpen={isWatershedPanelOpen}
                 isChatbotSidebarOpen={isChatbotOpen && chatbotDisplayMode === 'sidebar'}
                 selectedCardCoords={selectedCardCoords}
                 onMarkerCardSelect={setSelectedCardIdFromMap}

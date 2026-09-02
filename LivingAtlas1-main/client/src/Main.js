@@ -36,6 +36,7 @@ function Main(props) {
                 isUploadPanelOpen={props.isUploadPanelOpen}
                 isCustomLayerPanelOpen={props.isCustomLayerPanelOpen}
                 isBasemapOpen={props.isBasemapOpen}
+                isWatershedPanelOpen={props.isWatershedPanelOpen}
                 isChatbotSidebarOpen={props.isChatbotSidebarOpen}
                 isLayerPanelOpen={props.isLayerPanelOpen}
                 isModalOpen={props.isModalOpen}
