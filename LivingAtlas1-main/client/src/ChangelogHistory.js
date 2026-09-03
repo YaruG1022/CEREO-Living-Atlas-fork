@@ -28,6 +28,13 @@ function ChangelogHistory() {
                     <>
                         <h3>Update Date: 9/1 - 9/15/2026</h3>
 
+                        <h4>Watershed Delineation (New)</h4>
+                        <p>Added a Watershed Delineation panel to the left sidebar (water-waves icon), powered by the USGS StreamStats delineation service. Pick a state (WA/ID/OR), press Select point on map, and click a stream — the upstream drainage basin is computed by USGS, drawn on the map together with the snapped pour point, and the view zooms to the basin. A Clear result from map button removes the result. Like the other sidebar panels, opening it shifts the map view aside.</p>
+                        <p>While picking a point the cursor becomes a crosshair, and the panel asks you to zoom in further when the map is below zoom level 12 so the point snaps to the correct stream. Delineation usually takes a few seconds; the request can be cancelled, and a clear message is shown when it fails (for example when clicking far from any stream).</p>
+
+                        <h4>Sidebar Icons</h4>
+                        <p>Refreshed two left-sidebar icons: the GIS Services panel button now uses a globe icon, and the sidebar chatbot button now uses a chat-bubble icon.</p>
+
                         <h4>User Manual &amp; Onboarding</h4>
                         <p>Updated the user manual and onboarding for the Card Container, ArcGIS Upload Panel, Custom Layers Panel, and Card Detail View (Learn More modal) to match the current app features.</p>
                         <hr />
