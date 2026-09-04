@@ -1,0 +1,228 @@
+/*
+ * tokens.css — Living Atlas design tokens
+ *
+ * The single source of truth for color, type, spacing, elevation and motion.
+ * Component CSS should reference these variables instead of hardcoding values.
+ *
+ * Layer 1: primitives  (--slate-*, --blue-*, --navy-*)  — the raw ramps
+ * Layer 2: semantics   (--color-*)                      — what to actually use
+ * Layer 3: scales      (--space-*, --text-*, --radius-*, --shadow-*, --z-*)
+ */
+
+:root {
+  /* ---------------------------------------------------------------
+     1. PRIMITIVES
+     --------------------------------------------------------------- */
+
+  /* Neutral — cool slate, reads calmer than pure gray on map surfaces */
+  --slate-0:   #ffffff;
+  --slate-25:  #fafbfc;
+  --slate-50:  #f5f7fa;
+  --slate-100: #edf0f5;
+  --slate-200: #e0e5ec;
+  --slate-300: #cbd2dc;
+  --slate-400: #8f9bab;
+  --slate-500: #626e7d;
+  --slate-600: #4b5765;
+  --slate-700: #3d4855;
+  --slate-800: #2b3540;
+  --slate-900: #1a212a;
+
+  /* Accent — the one blue. Every interactive/selected state uses this ramp. */
+  --blue-50:  #eef4fd;
+  --blue-100: #d9e6fa;
+  --blue-200: #b8d0f4;
+  --blue-300: #8bb2ec;
+  --blue-400: #578fe0;
+  --blue-500: #2f6fd0;
+  --blue-600: #1f5bb8;
+  --blue-700: #194a97;
+  --blue-800: #163d7b;
+  --blue-900: #143255;
+
+  /* Brand navy — app chrome (navbar, panel headers). Structural, not accent. */
+  --navy-500: #3d5f85;
+  --navy-600: #33506f;
+  --navy-700: #27425d;
+  --navy-800: #1e3549;
+  --navy-900: #172837;
+
+  /* Status */
+  --green-600: #157a4d;
+  --green-50:  #e8f5ee;
+  --amber-600: #9a6400;
+  --amber-50:  #fdf3e2;
+  --red-600:   #c02a33;
+  --red-50:    #fdecec;
+
+  /* ---------------------------------------------------------------
+     2. SEMANTIC ALIASES — prefer these in component CSS
+     --------------------------------------------------------------- */
+
+  /* Surfaces */
+  --color-canvas:           var(--slate-50);   /* page background behind panels */
+  --color-surface:          var(--slate-0);    /* panels, cards, modals */
+  --color-surface-sunken:   var(--slate-50);   /* inset areas, empty states */
+  --color-surface-hover:    var(--slate-50);
+  --color-surface-active:   var(--slate-100);
+  --color-surface-selected: var(--blue-50);
+
+  /* Chrome */
+  --color-chrome:          var(--navy-800);
+  --color-chrome-hover:    var(--navy-700);
+  --color-chrome-text:     rgba(255, 255, 255, 0.92);
+  --color-chrome-text-dim: rgba(255, 255, 255, 0.64);
+
+  /* Borders — deliberately low contrast; heavy borders read as "unfinished" */
+  --color-border-subtle: var(--slate-100);
+  --color-border:        var(--slate-200);
+  --color-border-strong: var(--slate-300);
+
+  /* Text — all pass WCAG AA on --color-surface */
+  --color-text:           var(--slate-900);
+  --color-text-secondary: var(--slate-600);
+  --color-text-muted:     var(--slate-500);
+  --color-text-inverse:   #ffffff;
+  --color-text-link:      var(--blue-700);
+
+  /* Accent */
+  --color-accent:        var(--blue-600);
+  --color-accent-hover:  var(--blue-700);
+  --color-accent-active: var(--blue-800);
+  --color-accent-subtle: var(--blue-50);
+  --color-accent-text:   #ffffff;
+
+  /* Status */
+  --color-success:        var(--green-600);
+  --color-success-subtle: var(--green-50);
+  --color-warning:        var(--amber-600);
+  --color-warning-subtle: var(--amber-50);
+  --color-danger:         var(--red-600);
+  --color-danger-subtle:  var(--red-50);
+
+  /* ---------------------------------------------------------------
+     3. TYPOGRAPHY
+     --------------------------------------------------------------- */
+
+  /* No webfont request: resolves to Segoe UI Variable on Win11,
+     SF on macOS, Roboto on Android/ChromeOS. */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text",
+               "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "Cascadia Mono", Menlo,
+               Consolas, monospace;
+
+  --text-2xs: 10px;
+  --text-xs:  11px;
+  --text-sm:  12px;
+  --text-md:  13px;   /* base UI size — this app is data-dense on purpose */
+  --text-lg:  15px;
+  --text-xl:  18px;
+  --text-2xl: 22px;
+  --text-3xl: 28px;
+
+  --leading-tight:   1.25;
+  --leading-normal:  1.45;
+  --leading-relaxed: 1.65;
+
+  --weight-regular:  400;
+  --weight-medium:   500;
+  --weight-semibold: 600;
+  --weight-bold:     700;
+
+  --tracking-tight: -0.01em;
+  --tracking-wide:   0.02em;
+  --tracking-caps:   0.06em;   /* for uppercase section labels */
+
+  /* ---------------------------------------------------------------
+     4. SPACING — 2px base, everything lands on the grid
+     --------------------------------------------------------------- */
+
+  --space-3xs: 2px;
+  --space-2xs: 4px;
+  --space-xs:  6px;
+  --space-sm:  8px;
+  --space-md:  12px;
+  --space-lg:  16px;
+  --space-xl:  20px;
+  --space-2xl: 24px;
+  --space-3xl: 32px;
+  --space-4xl: 48px;
+
+  /* ---------------------------------------------------------------
+     5. RADIUS — three values, not nine
+     --------------------------------------------------------------- */
+
+  --radius-sm:   4px;    /* inputs, chips, tight controls */
+  --radius-md:   6px;    /* buttons, list rows, inner cards */
+  --radius-lg:   10px;   /* panels, modals, popovers */
+  --radius-full: 999px;
+
+  /* ---------------------------------------------------------------
+     6. ELEVATION — navy-tinted, layered. Never pure black.
+     --------------------------------------------------------------- */
+
+  --shadow-xs: 0 1px 2px rgba(23, 40, 55, 0.06);
+  --shadow-sm: 0 1px 2px rgba(23, 40, 55, 0.06),
+               0 1px 3px rgba(23, 40, 55, 0.08);
+  --shadow-md: 0 2px 4px rgba(23, 40, 55, 0.05),
+               0 4px 8px rgba(23, 40, 55, 0.08);
+  --shadow-lg: 0 4px 8px rgba(23, 40, 55, 0.05),
+               0 12px 24px rgba(23, 40, 55, 0.10);
+  --shadow-xl: 0 8px 16px rgba(23, 40, 55, 0.06),
+               0 24px 48px rgba(23, 40, 55, 0.14);
+
+  /* Directional, for the left/right slide-out panels */
+  --shadow-panel: 2px 0 12px rgba(23, 40, 55, 0.10);
+
+  /* Focus ring — one ring for the whole app */
+  --shadow-focus: 0 0 0 3px rgba(31, 91, 184, 0.28);
+
+  /* ---------------------------------------------------------------
+     7. CONTROL SIZING — keeps density consistent across panels
+     --------------------------------------------------------------- */
+
+  --control-height-sm: 24px;
+  --control-height-md: 30px;
+  --control-height-lg: 36px;
+  --control-padding-x: var(--space-md);
+
+  /* ---------------------------------------------------------------
+     8. MOTION
+     --------------------------------------------------------------- */
+
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --duration-slow: 260ms;
+
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out:      cubic-bezier(0, 0, 0.2, 1);
+  --ease-in-out:   cubic-bezier(0.4, 0, 0.2, 1);
+
+  --transition-colors: color var(--duration-fast) var(--ease-standard),
+                       background-color var(--duration-fast) var(--ease-standard),
+                       border-color var(--duration-fast) var(--ease-standard);
+
+  /* ---------------------------------------------------------------
+     9. Z-INDEX — the only place a stacking value should be written
+     --------------------------------------------------------------- */
+
+  --z-map:            1;
+  --z-map-control:    100;
+  --z-panel:          1000;
+  --z-sidebar:        1100;
+  --z-navbar:         1200;
+  --z-dropdown:       2000;
+  --z-modal-backdrop: 3000;
+  --z-modal:          3100;
+  --z-popover:        4000;
+  --z-toast:          5000;
+  --z-tooltip:        6000;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-base: 0ms;
+    --duration-slow: 0ms;
+  }
+}
