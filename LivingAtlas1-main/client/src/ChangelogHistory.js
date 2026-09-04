@@ -37,6 +37,10 @@ function ChangelogHistory() {
 
                         <h4>User Manual &amp; Onboarding</h4>
                         <p>Updated the user manual and onboarding for the Card Container, ArcGIS Upload Panel, Custom Layers Panel, and Card Detail View (Learn More modal) to match the current app features.</p>
+
+                        <h4>Design System Foundation</h4>
+                        <p>Added a shared design token file that defines the app's colors, text sizes, spacing, corner radii, shadows and animation timing in one central place. Panels can now pull from one agreed set of values instead of each screen hardcoding its own, which is groundwork for a more consistent look as panels are updated over time. Nothing in the existing screens changed except the font below.</p>
+                        <p>The app now uses your operating system's interface font (Segoe UI on Windows, San Francisco on macOS) instead of Arial. Text reads a little crisper and matches the rest of your system; no layout or spacing has changed.</p>
                         <hr />
 
                         <h3>Update Date: 8/15 - 8/30/2026</h3>
